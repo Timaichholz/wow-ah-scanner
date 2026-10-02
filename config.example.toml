@@ -1,0 +1,62 @@
+# ============================================================
+#  WoW AH-Scanner – Konfiguration
+#  Diese Datei als "config.toml" speichern und ausfüllen.
+#  config.toml NIEMALS teilen (enthält dein API-Secret)!
+# ============================================================
+
+[blizzard]
+# Kostenlos anlegen: https://develop.battle.net/access/clients  ->  "Create Client"
+client_id = ""
+client_secret = ""
+region = "eu"
+locale = "de_DE"
+requests_per_second = 25
+
+[realm]
+# Slug deines Realms (klein, Leerzeichen als Bindestrich), z. B. "blackmoore", "die-aldor", "aegwynn".
+# Nötig für Realm-Auktionen (Ausrüstung, Deko). Rohstoffe sind regionsweit und brauchen keinen Realm.
+slug = ""
+
+[character]
+# Optional: Mit Name + Realm zeigt der Bericht nur Rezepte, die dieser Charakter kennt
+# (wenn unten only_known_recipes = true).
+name = ""
+realm_slug = ""
+
+[filter]
+# Leere Listen = alles. Teilwörter reichen, Groß-/Kleinschreibung egal.
+professions = []            # z. B. ["Lederverarbeitung", "Schneiderei"]
+tier_keywords = []          # z. B. ["Khaz Algar"] für The War Within, ["Klassisch"] für Classic
+tier_exclude_keywords = ["Midnight", "Quel"]  # Erweiterungsstufen ausschließen (Teilwörter)
+category_keywords = []      # z. B. ["Deko"], wenn du nur Housing-Deko sehen willst
+only_known_recipes = false
+
+[analysis]
+ah_cut = 0.05               # AH-Gebühr beim Verkauf
+market_share = 0.2          # Welchen Anteil der Tagesverkäufe du realistisch abgreifst (20 %)
+history_days = 7            # Zeitraum für Nachfrage und Durchschnittspreise
+retention_days = 30         # Alte Scans danach löschen
+max_gap_hours = 3           # Größere Lücken zwischen Scans werden nicht für die Nachfrage genutzt
+min_profit_gold = 5         # Crafts unter diesem Gewinn ausblenden
+top_n = 50                  # Anzahl Empfehlungen im Bericht
+crafts_per_recipe = 10      # Mengen in der Farmliste für so viele Crafts
+farm_list_recipes = 15      # Wie viele Rezepte in die Farmliste
+competition_threshold = 40  # Ab so vielen Angeboten gilt ein Item als umkämpft
+min_auctions = 3            # Items mit weniger Angeboten nur zeigen, wenn sie nachweislich verkauft werden
+min_sold_per_day = 0.5      # Mindest-Verkäufe pro Tag, damit ein Item als verkäuflich gilt
+min_demand_hours = 12       # Ab so vielen Stunden Verlauf werden unverkäufliche Items ausgeblendet
+demand_min_hours = 3        # Erst ab so vielen Stunden Verlauf werden Verkäufe/Tag überhaupt angezeigt
+
+# Einordnung nach Aufwand (Charge = crafts_per_recipe Crafts)
+easy_max_invest_gold = 5000     # "Easy Money": höchstens so viel Gold Einsatz pro Charge ...
+easy_min_sold_per_day = 2       # ... und mindestens so viele Verkäufe pro Tag
+capital_threshold_gold = 50000  # Ab so viel Einsatz pro Charge gilt etwas als kapitalintensiv
+
+[watch]
+interval_minutes = 60       # Blizzard aktualisiert die AH-Daten etwa stündlich
+report_every_scan = true
+
+[vendor_prices]
+# Händlerware (nicht im AH), Preis in KUPFER pro Stück: Item-ID = Preis
+# 10000 Kupfer = 1 Gold. Beispiel:
+# 3371 = 20

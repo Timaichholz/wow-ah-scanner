@@ -1,0 +1,75 @@
+name: AH-Scan
+
+# Sicherheit: Der Workflow startet NUR per Zeitplan oder manuell durch den Repo-Besitzer.
+# Bewusst KEIN "pull_request"-Trigger -> fremde Forks/PRs können ihn nie mit den Secrets ausführen.
+on:
+  schedule:
+    - cron: "17 * * * *"   # jede Stunde zur Minute 17 (UTC)
+  workflow_dispatch:        # manuell starten über "Run workflow"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ah-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      TZ: Europe/Berlin
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false   # kein GitHub-Token auf dem Runner hinterlassen
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Abhängigkeiten installieren
+        run: pip install -r requirements.txt
+
+      - name: Gespeicherten Zustand laden (Datenbank, Rezepte, letzter Snapshot)
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: ahstate-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ahstate-
+
+      - name: Scan und Bericht
+        env:
+          AHSCANNER_CLIENT_ID: ${{ secrets.BLIZZARD_CLIENT_ID }}
+          AHSCANNER_CLIENT_SECRET: ${{ secrets.BLIZZARD_CLIENT_SECRET }}
+        run: python -m ahscanner --config config.ci.toml ci
+
+      - name: Zustand speichern
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: ahstate-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Bericht als Download sichern
+        uses: actions/upload-artifact@v4
+        with:
+          name: bericht
+          path: output/site
+          retention-days: 3
+
+      - name: Webseite vorbereiten
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: output/site
+
+      - name: Auf GitHub Pages veröffentlichen
+        id: deploy
+        uses: actions/deploy-pages@v4

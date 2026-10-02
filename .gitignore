@@ -1,0 +1,11 @@
+# Lokale Konfiguration mit Secrets – niemals hochladen
+config.toml
+
+# Laufzeitdaten
+data/*
+!data/.gitkeep
+output/*
+!output/.gitkeep
+
+__pycache__/
+*.pyc

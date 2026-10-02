@@ -1,0 +1,43 @@
+# ============================================================
+#  Konfiguration für den automatischen Lauf auf GitHub Actions
+#  KEINE Secrets hier eintragen! Client-ID und Secret kommen aus den
+#  Repository-Secrets BLIZZARD_CLIENT_ID und BLIZZARD_CLIENT_SECRET.
+#  Achtung: Das Repo ist öffentlich – alles in dieser Datei ist sichtbar.
+# ============================================================
+
+[blizzard]
+region = "eu"
+locale = "de_DE"
+requests_per_second = 25
+
+[realm]
+slug = "dun-morogh"
+
+[filter]
+professions = []
+tier_keywords = []
+tier_exclude_keywords = ["Midnight", "Quel"]
+category_keywords = []
+only_known_recipes = false
+
+[analysis]
+ah_cut = 0.05
+market_share = 0.2
+history_days = 7
+retention_days = 14         # kürzer als lokal, damit der Cache klein bleibt
+only_recipe_items = true    # nur Items speichern, die in Rezepten vorkommen
+max_gap_hours = 3
+min_profit_gold = 5
+top_n = 80
+crafts_per_recipe = 10
+farm_list_recipes = 20
+competition_threshold = 40
+min_auctions = 3
+min_sold_per_day = 0.5
+min_demand_hours = 12
+demand_min_hours = 3
+easy_max_invest_gold = 5000
+easy_min_sold_per_day = 2
+capital_threshold_gold = 50000
+
+[vendor_prices]
