@@ -252,7 +252,7 @@ def analyze_recipes(recipes, mv, cfg):
         rows.sort(key=lambda r: (r["potential_per_day"] is not None, r["potential_per_day"] or 0, r["profit"]), reverse=True)
     else:
         rows.sort(key=lambda r: r["profit"], reverse=True)
-    return rows[: int(a["top_n"])], has_demand, skipped
+    return rows[: int(a["top_n"])], has_demand, skipped, rows
 
 
 def analyze_materials(all_recipes, mv, cfg, limit=60):

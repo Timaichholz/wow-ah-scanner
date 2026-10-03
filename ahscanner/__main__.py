@@ -69,8 +69,8 @@ def _optional(label, func, default):
 
 
 def cmd_report(cfg, args):
-    from .farm import (analyze_farmspots, analyze_flips, analyze_raw_materials, analyze_token, analyze_transmog,
-                       analyze_volume, data_health)
+    from .farm import (analyze_farmspots, analyze_flips, analyze_matrix, analyze_raw_materials, analyze_token,
+                       analyze_transmog, analyze_volume, data_health)
 
     recipes = load_recipes()
     if recipes is None:
@@ -95,7 +95,7 @@ def cmd_report(cfg, args):
             sys.exit(1)
         mv = MarketView(db, cfg)
 
-        rows, has_demand, skipped = analyze_recipes(selected, mv, cfg)
+        rows, has_demand, skipped, all_rows = analyze_recipes(selected, mv, cfg)
         excl = [k.lower() for k in cfg["filter"].get("tier_exclude_keywords") or []]
         material_recipes = [r for r in recipes if not any(k in (r["tier"] or "").lower() for k in excl)]
         materials = analyze_materials(material_recipes, mv, cfg)
@@ -107,6 +107,7 @@ def cmd_report(cfg, args):
             "transmog": _optional("Transmog", lambda: analyze_transmog(api, db, mv, cfg, recipes), []),
             "volume": _optional("Volumen", lambda: analyze_volume(api, db, mv, cfg, recipes), []),
             "flips": _optional("Schnäppchen", lambda: analyze_flips(api, db, mv, cfg, recipes), []),
+            "matrix": _optional("Berufe-Matrix", lambda: analyze_matrix(api, db, mv, cfg, recipes, all_rows), None),
         }
     finally:
         db.close()

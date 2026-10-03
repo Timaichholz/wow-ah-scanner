@@ -402,7 +402,89 @@ def _section_flips(flips):
     return "".join(out)
 
 
+def _heat(value, vmax):
+    if not value or not vmax:
+        return ""
+    pct = max(8, min(70, int(value / vmax * 70)))
+    return f" style='background:color-mix(in srgb, var(--good) {pct}%, transparent)'"
+
+
+def _section_matrix(mx):
+    if not mx or not mx.get("expansions"):
+        return ""
+    exps = mx["expansions"]
+    out = ["<section id='berufe'><h2>Berufe × Erweiterung</h2>",
+           "<div class='note'>Für jede Erweiterung: wie viel Gold die Waren eines Berufs <b>pro Tag am Markt umsetzen</b> "
+           "(Sammeln) bzw. wie viel Gewinn-Potenzial die profitablen Rezepte haben (Herstellen). Je grüner, desto mehr "
+           "Geld bewegt sich dort. Das ist der Markt, nicht dein persönlicher Stundenlohn – der hängt von Spot und "
+           "Tempo ab. Ohne Nachfragedaten zeigen die Zellen den mittleren Stückpreis.</div>"]
+    # --- Sammeln
+    gcols = mx["gather_cols"]
+    vmax = max((c["volume"] for e in exps for c in e["gather"].values() if c), default=0)
+    head = "".join(f"<th>{_e(c)}</th>" for c in gcols)
+    body = []
+    for e in exps:
+        cells = []
+        for col in gcols:
+            c = e["gather"].get(col)
+            if not c:
+                cells.append("<td class='muted'>–</td>")
+                continue
+            main = money(c["volume"]) + "/Tag" if mx["has_demand"] else "Ø " + money(c["median_price"])
+            top = c["items"][0]["name"] if c["items"] else ""
+            cells.append(f"<td class='num'{_heat(c['volume'], vmax)} data-v='{c['volume']}'>{main}"
+                         f"<div class='small muted'>{_e(top)}</div></td>")
+        body.append(f"<tr><td><a href='#exp-{_e(e['expansion'])}'>{_e(e['expansion'])}</a></td>{''.join(cells)}</tr>")
+    out.append(f"<h3>Sammeln (Gold-Umsatz pro Tag)</h3><div class='wrap'><table><thead><tr><th>Erweiterung</th>{head}"
+               f"</tr></thead><tbody>{''.join(body)}</tbody></table></div>")
+    # --- Herstellen
+    ccols = mx["craft_cols"]
+    if ccols:
+        vmax = max((c["potential"] for e in exps for c in e["craft"].values() if c), default=0)
+        head = "".join(f"<th>{_e(c)}</th>" for c in ccols)
+        body = []
+        for e in exps:
+            cells = []
+            for col in ccols:
+                c = e["craft"].get(col)
+                if not c:
+                    cells.append("<td class='muted'>–</td>")
+                    continue
+                main = money(c["potential"]) + "/Tag" if c["potential"] else f"{c['n']} Rezepte"
+                cells.append(f"<td class='num'{_heat(c['potential'], vmax)} data-v='{c['potential']}'>{main}"
+                             f"<div class='small muted'>{c['n']} profitabel · Ø {money(c['median_profit'])}</div></td>")
+            body.append(f"<tr><td><a href='#exp-{_e(e['expansion'])}'>{_e(e['expansion'])}</a></td>{''.join(cells)}</tr>")
+        out.append(f"<h3>Herstellen (Gewinn-Potenzial pro Tag)</h3><div class='wrap'><table><thead><tr><th>Erweiterung</th>"
+                   f"{head}</tr></thead><tbody>{''.join(body)}</tbody></table></div>")
+    # --- Details je Erweiterung
+    out.append("<h3>Beste Methoden je Erweiterung</h3>")
+    for e in exps:
+        parts = []
+        if e["best_gather"]:
+            act, c = e["best_gather"]
+            items = "".join(f"<li>{_link(it['item_id'], it['name'])} <span class='muted small'>· {money(it['price'])}"
+                            f" · {_sold(it['sold_per_day'])}/Tag</span></li>" for it in c["items"])
+            parts.append(f"<div><b>Bestes Sammeln: {_e(act)}</b> <span class='muted small'>({money(c['volume'])}/Tag "
+                         f"Umsatz)</span><ol>{items}</ol></div>")
+        if e["best_craft"]:
+            prof, c = e["best_craft"]
+            items = "".join(f"<li>{_link(it['item_id'], it['name'])} <span class='muted small'>· {money(it['profit'])}"
+                            f"/Craft · {_sold(it['sold_per_day'])}/Tag</span></li>" for it in c["items"])
+            parts.append(f"<div><b>Bester Beruf: {_e(prof)}</b> <span class='muted small'>({c['n']} profitable Rezepte)"
+                         f"</span><ol>{items}</ol></div>")
+        if e["spots"]:
+            links = ", ".join(f"<a href='#spot-{_e(s['id'])}'>{_e(s['name_de'])}</a>" for s in e["spots"])
+            parts.append(f"<div><b>Farmspots:</b> {links}</div>")
+        out.append(f"<details class='card exp' id='exp-{_e(e['expansion'])}'><summary><b>{_e(e['expansion'])}</b> "
+                   f"<span class='muted small'>· Sammel-Umsatz {money(e['volume'])}/Tag</span></summary>"
+                   f"<div class='expgrid'>{''.join(parts) or '<span class=muted>Keine Daten</span>'}</div></details>")
+    out.append("</section>")
+    return "".join(out)
+
+
 EXTRA_CSS = """
+.exp{margin:8px 0}.expgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:8px}
+.expgrid ol{margin:4px 0 0;padding-left:18px}
 nav{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);display:flex;gap:6px;flex-wrap:wrap;padding:8px 0;margin-bottom:8px}
 nav a{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:999px;padding:4px 12px;text-decoration:none;font-size:13px}
 a{color:var(--accent)}h3{font-size:15px;margin:22px 0 6px}section{scroll-margin-top:56px}
@@ -432,10 +514,11 @@ def write_html(path, recipes, materials, has_demand, demand_hours, overview, ski
 <style>{CSS}{EXTRA_CSS}</style></head>
 <body><main><h1>Gold-Berater · Dun Morogh</h1>
 <div class="meta">Erstellt {datetime.now():%d.%m.%Y %H:%M} · {scans} · Nachfrage-Zeitraum: {demand_hours:.0f} h · <a href="farmliste_aktuell.txt">Farmliste (Text)</a></div>
-<nav><a href="#uebersicht">Übersicht</a><a href="#farmspots">Farmspots</a><a href="#volumen">Volumen</a><a href="#schnaeppchen">Schnäppchen</a><a href="#rohstoffe">Rohstoffe</a><a href="#transmog">Transmog</a><a href="#crafting">Crafting</a></nav>
+<nav><a href="#uebersicht">Übersicht</a><a href="#farmspots">Farmspots</a><a href="#berufe">Berufe × Erweiterung</a><a href="#volumen">Volumen</a><a href="#schnaeppchen">Schnäppchen</a><a href="#rohstoffe">Rohstoffe</a><a href="#transmog">Transmog</a><a href="#crafting">Crafting</a></nav>
 {''.join(notes)}
 {_section_overview(extra, recipes, skipped)}
 {_section_spots(extra.get('spots'))}
+{_section_matrix(extra.get('matrix'))}
 {_section_volume(extra.get('volume') or [], recipes)}
 {_section_flips(extra.get('flips') or [])}
 {_section_raw(extra.get('raw'))}
@@ -518,6 +601,12 @@ def write_summary_json(path, recipes, extra, demand_hours):
                     for it in (extra.get("volume") or [])[:60]],
         "schnaeppchen": [{k: f[k] for k in ("name", "item_id", "market", "buy", "avg", "margin", "sold_per_day")}
                          for f in (extra.get("flips") or [])[:40]],
+        "berufe_matrix": [{"erweiterung": e["expansion"],
+                           "bestes_sammeln": e["best_gather"][0] if e["best_gather"] else None,
+                           "sammel_umsatz": {k: round(v["volume"]) for k, v in e["gather"].items() if v},
+                           "bester_beruf": e["best_craft"][0] if e["best_craft"] else None,
+                           "beruf_potenzial": {k: round(v["potential"]) for k, v in e["craft"].items() if v}}
+                          for e in ((extra.get("matrix") or {}).get("expansions") or [])],
         "crafts": [{k: r.get(k) for k in ("type", "item", "item_id", "profession", "tier", "profit", "sold_per_day",
                                           "invest", "rating")} for r in recipes[:40]],
     }

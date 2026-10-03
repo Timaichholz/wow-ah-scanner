@@ -310,6 +310,88 @@ def analyze_flips(api, db, mv, cfg, recipes, limit=80):
 
 
 # ---------------------------------------------------------------------------
+# Matrix: Erweiterung × Beruf
+# ---------------------------------------------------------------------------
+EXP_ORDER = ["Classic", "Burning Crusade", "Wrath of the Lich King", "Cataclysm", "Mists of Pandaria",
+             "Warlords of Draenor", "Legion", "Battle for Azeroth", "Shadowlands", "Dragonflight", "The War Within"]
+# Sammel-Tätigkeit -> Unterklassen der Handwerkswaren
+GATHER = [("Kräuterkunde", {9}), ("Bergbau", {7, 4}), ("Kürschnerei", {6}), ("Stoff", {5}),
+          ("Entzaubern", {12}), ("Fleisch & Fisch", {8}), ("Elementar", {10})]
+
+
+def analyze_matrix(api, db, mv, cfg, recipes, craft_rows, candidates=3000):
+    exp_map = item_expansions(recipes or [])
+    rows = []
+    for item_id, st in mv.latest.items():
+        if st["source"] != "commodity" or not st.get("market_price"):
+            continue
+        exp = exp_map.get(item_id)
+        if not exp or exp == "Midnight":
+            continue
+        sold = mv.sold_per_day(item_id)
+        rows.append((st["market_price"] * (sold or 0), item_id, st, sold, exp))
+    rows.sort(key=lambda r: (r[0], r[2]["market_price"]), reverse=True)
+    rows = rows[:candidates]
+    meta = ensure_items(api, db, [r[1] for r in rows])
+
+    gather = {}
+    for vol, item_id, st, sold, exp in rows:
+        m = meta.get(item_id) or {}
+        if m.get("class_id") != TRADE_GOODS_CLASS:
+            continue
+        for act, subs in GATHER:
+            if m.get("subclass_id") in subs:
+                c = gather.setdefault((exp, act), {"volume": 0.0, "items": [], "prices": []})
+                c["volume"] += vol
+                c["prices"].append(st["market_price"])
+                c["items"].append({"item_id": item_id, "name": m.get("name") or f"Item {item_id}",
+                                   "price": st["market_price"], "sold_per_day": sold,
+                                   "gold_volume": vol if sold is not None else None})
+    for c in gather.values():
+        c["items"].sort(key=lambda it: (it["gold_volume"] or 0, it["price"]), reverse=True)
+        c["items"] = c["items"][:5]
+        ps = sorted(c.pop("prices"))
+        c["median_price"] = ps[len(ps) // 2]
+        c["n"] = len(ps)
+
+    craft = {}
+    for r in craft_rows or []:
+        exp = expansion_of_tier(r.get("tier"))
+        if not exp or exp == "Midnight":
+            continue
+        c = craft.setdefault((exp, r["profession"]), {"potential": 0.0, "n": 0, "items": [], "profits": []})
+        c["potential"] += r.get("potential_per_day") or 0
+        c["n"] += 1
+        c["profits"].append(r["profit"])
+        c["items"].append(r)
+    for c in craft.values():
+        c["items"].sort(key=lambda r: (r.get("potential_per_day") or 0, r["profit"]), reverse=True)
+        c["items"] = [{"item_id": r.get("item_id"), "name": r["item"], "profit": r["profit"],
+                       "sold_per_day": r.get("sold_per_day"), "potential": r.get("potential_per_day")}
+                      for r in c["items"][:5]]
+        ps = sorted(c.pop("profits"))
+        c["median_profit"] = ps[len(ps) // 2]
+
+    spots = load_farmspots()
+    gather_cols = [a for a, _ in GATHER]
+    craft_cols = sorted({k[1] for k in craft})
+    used = {k[0] for k in list(gather) + list(craft)} | {s.get("expansion") for s in spots}
+    per_exp = []
+    for e in [x for x in EXP_ORDER if x in used]:
+        g = {a: gather.get((e, a)) for a in gather_cols}
+        cr = {p: craft.get((e, p)) for p in craft_cols}
+        best_g = max(((a, c) for a, c in g.items() if c), key=lambda x: (x[1]["volume"], x[1]["median_price"]),
+                     default=None)
+        best_c = max(((p, c) for p, c in cr.items() if c), key=lambda x: (x[1]["potential"], x[1]["n"]),
+                     default=None)
+        per_exp.append({"expansion": e, "gather": g, "craft": cr, "best_gather": best_g, "best_craft": best_c,
+                        "spots": [{"id": s["id"], "name_de": s["name_de"]} for s in spots if s.get("expansion") == e],
+                        "volume": sum(c["volume"] for c in g.values() if c)})
+    has_demand = any(it["gold_volume"] is not None for c in gather.values() for it in c["items"])
+    return {"expansions": per_exp, "gather_cols": gather_cols, "craft_cols": craft_cols, "has_demand": has_demand}
+
+
+# ---------------------------------------------------------------------------
 # WoW-Marke & Midnight-Ziel
 # ---------------------------------------------------------------------------
 def analyze_token(db, cfg):
