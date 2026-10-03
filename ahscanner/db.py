@@ -186,12 +186,18 @@ class DB:
             )
         }
         sold = {}
-        for src, item, total in self.conn.execute(
-            "SELECT s.source, i.item_id, SUM(i.sold_est) FROM item_stats i JOIN snapshots s ON s.id=i.snapshot_id"
+        for src, item, total, peak in self.conn.execute(
+            "SELECT s.source, i.item_id, SUM(i.sold_est), MAX(i.sold_est) FROM item_stats i"
+            " JOIN snapshots s ON s.id=i.snapshot_id"
             " WHERE s.ts>=? AND s.interval_h IS NOT NULL GROUP BY s.source, i.item_id",
             (cutoff_ts,),
         ):
-            sold[(src, item)] = total or 0.0
+            total, peak = total or 0.0, peak or 0.0
+            # Ausreißer-Schutz: Stammt mehr als die Hälfte des Absatzes aus EINEM einzigen Scan, war das
+            # fast immer ein abgebrochener/umgestellter Großposten und kein echter Verkauf -> diesen Scan ignorieren.
+            if peak > 0.5 * total:
+                total -= peak
+            sold[(src, item)] = total
         avg = {}
         for src, item, a in self.conn.execute(
             "SELECT s.source, i.item_id, AVG(i.market_price) FROM item_stats i JOIN snapshots s ON s.id=i.snapshot_id"
