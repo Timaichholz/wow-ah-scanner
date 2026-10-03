@@ -134,6 +134,8 @@ def analyze_recipes(recipes, mv, cfg):
 
     best = {}
     for r in recipes:
+        if not r.get("reagents"):
+            continue  # nur Qualitäts-Slots ohne Item-IDs -> Kosten nicht berechenbar
         out_id = r["crafted_id"]
         st = mv.stats(out_id)
         flags = []

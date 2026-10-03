@@ -59,6 +59,40 @@ def item_expansions(recipes):
     return {i: max(c, key=c.get) for i, c in counts.items()}
 
 
+class ExpResolver:
+    """Ordnet Items einer Erweiterung zu – in drei Stufen:
+    1. Item-ID kommt als Reagenz/Produkt in Rezepten vor (sicher)
+    2. Itemname entspricht einem Qualitäts-Material-Slot in Rezepten (ab Dragonflight)
+    3. Rückfall über Blizzards Item-ID-Bereiche (nur Dragonflight / The War Within, dort eindeutig)
+    """
+
+    def __init__(self, recipes):
+        self.ids = item_expansions(recipes or [])
+        names = {}
+        for r in recipes or []:
+            exp = expansion_of_tier(r.get("tier"))
+            if not exp:
+                continue
+            for n in r.get("slot_names") or []:
+                names.setdefault(_norm(n), {}).setdefault(exp, 0)
+                names[_norm(n)][exp] += 1
+        self.names = {k: max(v, key=v.get) for k, v in names.items()}
+
+    def get(self, item_id, meta=None):
+        exp = self.ids.get(item_id)
+        if exp:
+            return exp
+        if meta and meta.get("name"):
+            exp = self.names.get(_norm(meta["name"]))
+            if exp:
+                return exp
+        if item_id and 190000 <= item_id < 210000:
+            return "Dragonflight"
+        if item_id and 210000 <= item_id < 236000:
+            return "The War Within"
+        return None
+
+
 def load_farmspots():
     if not FARMSPOTS_FILE.exists():
         return []
@@ -159,7 +193,7 @@ def analyze_farmspots(api, db, mv, cfg):
 # ---------------------------------------------------------------------------
 def analyze_raw_materials(api, db, mv, cfg, recipes, per_group=None, candidates=2500):
     per_group = per_group or int(cfg["analysis"].get("raw_per_group", 30))
-    exp_map = item_expansions(recipes or [])
+    res = ExpResolver(recipes)
     excluded = {k.lower() for k in cfg["filter"].get("tier_exclude_keywords") or []}
     exclude_midnight = any(k in ("midnight", "quel") for k in excluded)
 
@@ -182,7 +216,7 @@ def analyze_raw_materials(api, db, mv, cfg, recipes, per_group=None, candidates=
         act = activity_for(m)
         if not act:
             continue
-        exp = exp_map.get(item_id)
+        exp = res.get(item_id, m)
         if exclude_midnight and exp == "Midnight":
             continue
         avg = mv.avg_price(item_id)
@@ -250,7 +284,7 @@ def analyze_transmog(api, db, mv, cfg, recipes, limit=None, candidates=600, min_
 # ---------------------------------------------------------------------------
 def analyze_volume(api, db, mv, cfg, recipes, limit=100):
     """Rohstoffe/Handelswaren mit dem höchsten Gold-Umsatz pro Tag – egal wie klein der Stückpreis ist."""
-    exp_map = item_expansions(recipes or [])
+    res = ExpResolver(recipes)
     rows = []
     for item_id, st in mv.latest.items():
         if st["source"] != "commodity" or not st.get("market_price"):
@@ -264,13 +298,14 @@ def analyze_volume(api, db, mv, cfg, recipes, limit=100):
     meta = ensure_items(api, db, [r[1] for r in top])
     out = []
     for vol, item_id, st, sold in top:
-        if exp_map.get(item_id) == "Midnight":
-            continue
         m = meta.get(item_id) or {}
+        exp = res.get(item_id, m)
+        if exp == "Midnight":
+            continue
         act = activity_for(m)
         out.append({"item_id": item_id, "name": m.get("name") or f"Item {item_id}",
                     "kind": act[0] if act else (m.get("class_name") or "–"),
-                    "how": act[1] if act else "", "expansion": exp_map.get(item_id, "–"),
+                    "how": act[1] if act else "", "expansion": exp or "–",
                     "price": st["market_price"], "sold_per_day": sold, "gold_volume": vol,
                     "supply": st["total_qty"], "days_supply": st["total_qty"] / sold if sold else None})
         if len(out) >= limit:
@@ -287,7 +322,7 @@ def analyze_flips(api, db, mv, cfg, recipes, limit=80):
     share = float(a.get("market_share", 0.2))
     min_disc = float(a.get("flip_min_discount", 0.15))
     min_sold = float(a.get("flip_min_sold_per_day", 3))
-    exp_map = item_expansions(recipes or [])
+    res = ExpResolver(recipes)
     rows = []
     for item_id, st in mv.latest.items():
         avg = mv.avg_price(item_id)
@@ -307,9 +342,9 @@ def analyze_flips(api, db, mv, cfg, recipes, limit=80):
     meta = ensure_items(api, db, [r[1] for r in top])
     out = []
     for potential, item_id, st, sold, avg, buy, margin in top:
-        if exp_map.get(item_id) == "Midnight":
-            continue
         m = meta.get(item_id) or {}
+        if res.get(item_id, m) == "Midnight":
+            continue
         out.append({"item_id": item_id, "name": m.get("name") or f"Item {item_id}",
                     "market": "Rohstoff (EU)" if st["source"] == "commodity" else "Realm",
                     "buy": buy, "avg": avg, "discount": 1 - buy / avg, "margin": margin,
@@ -330,24 +365,24 @@ GATHER = [("Kräuterkunde", {9}), ("Bergbau", {7, 4}), ("Kürschnerei", {6}), ("
 
 
 def analyze_matrix(api, db, mv, cfg, recipes, craft_rows, candidates=3000):
-    exp_map = item_expansions(recipes or [])
+    res = ExpResolver(recipes)
     rows = []
     for item_id, st in mv.latest.items():
         if st["source"] != "commodity" or not st.get("market_price"):
             continue
-        exp = exp_map.get(item_id)
-        if not exp or exp == "Midnight":
-            continue
         sold = mv.sold_per_day(item_id)
-        rows.append((st["market_price"] * (sold or 0), item_id, st, sold, exp))
+        rows.append((st["market_price"] * (sold or 0), item_id, st, sold))
     rows.sort(key=lambda r: (r[0], r[2]["market_price"]), reverse=True)
     rows = rows[:candidates]
     meta = ensure_items(api, db, [r[1] for r in rows])
 
     gather = {}
-    for vol, item_id, st, sold, exp in rows:
+    for vol, item_id, st, sold in rows:
         m = meta.get(item_id) or {}
         if m.get("class_id") != TRADE_GOODS_CLASS:
+            continue
+        exp = res.get(item_id, m)
+        if not exp or exp == "Midnight":
             continue
         for act, subs in GATHER:
             if m.get("subclass_id") in subs:

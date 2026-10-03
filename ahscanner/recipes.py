@@ -5,6 +5,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .config import RECIPES_FILE
 
+# erhöhen, wenn sich das Rezeptformat ändert -> Cloud lädt die Rezepte automatisch neu
+RECIPES_VERSION = 2
+
 
 def _crafted_quantity(rec):
     cq = rec.get("crafted_quantity") or {}
@@ -26,7 +29,10 @@ def parse_recipe(rec, meta):
         if not reagent.get("id") or not r.get("quantity"):
             continue
         reagents.append({"id": reagent["id"], "name": reagent.get("name") or f"Item {reagent['id']}", "qty": r["quantity"]})
-    if not reagents:
+    # Ab Dragonflight stecken Materialien mit Qualitätsstufen in "modified_crafting_slots" (nur Name, keine ID)
+    slot_names = [((s.get("slot_type") or {}).get("name")) for s in rec.get("modified_crafting_slots") or []]
+    slot_names = [n for n in slot_names if isinstance(n, str) and n]
+    if not reagents and not slot_names:
         return None
     return {
         "id": rec["id"],
@@ -38,6 +44,7 @@ def parse_recipe(rec, meta):
         "crafted_name": crafted.get("name", ""),
         "crafted_qty": _crafted_quantity(rec),
         "reagents": reagents,
+        "slot_names": slot_names,
         "has_modified_slots": bool(rec.get("modified_crafting_slots")),
     }
 
@@ -83,7 +90,7 @@ def build_cache(api, workers=8):
                 print(f"  {done:,}/{len(todo):,}".replace(",", "."), flush=True)
 
     with open(RECIPES_FILE, "w", encoding="utf-8") as f:
-        json.dump({"built_at": int(time.time()), "recipes": recipes}, f, ensure_ascii=False)
+        json.dump({"version": RECIPES_VERSION, "built_at": int(time.time()), "recipes": recipes}, f, ensure_ascii=False)
     print(f"Fertig: {len(recipes):,} herstellbare Rezepte gespeichert ({time.time() - started:.0f} s).".replace(",", "."))
     return recipes
 
@@ -101,7 +108,10 @@ def recipes_age_days():
         return None
     try:
         with open(RECIPES_FILE, encoding="utf-8") as f:
-            return (time.time() - json.load(f).get("built_at", 0)) / 86400
+            data = json.load(f)
+        if data.get("version", 1) < RECIPES_VERSION:
+            return None  # altes Format -> neu laden
+        return (time.time() - data.get("built_at", 0)) / 86400
     except (OSError, ValueError):
         return None
 
