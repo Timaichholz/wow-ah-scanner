@@ -69,7 +69,8 @@ def _optional(label, func, default):
 
 
 def cmd_report(cfg, args):
-    from .farm import analyze_farmspots, analyze_raw_materials, analyze_token, analyze_transmog, data_health
+    from .farm import (analyze_farmspots, analyze_flips, analyze_raw_materials, analyze_token, analyze_transmog,
+                       analyze_volume, data_health)
 
     recipes = load_recipes()
     if recipes is None:
@@ -104,6 +105,8 @@ def cmd_report(cfg, args):
             "spots": _optional("Farmspots", lambda: analyze_farmspots(api, db, mv, cfg), []),
             "raw": _optional("Rohstoffe", lambda: analyze_raw_materials(api, db, mv, cfg, recipes), []),
             "transmog": _optional("Transmog", lambda: analyze_transmog(api, db, mv, cfg, recipes), []),
+            "volume": _optional("Volumen", lambda: analyze_volume(api, db, mv, cfg, recipes), []),
+            "flips": _optional("Schnäppchen", lambda: analyze_flips(api, db, mv, cfg, recipes), []),
         }
     finally:
         db.close()
@@ -116,7 +119,8 @@ def cmd_report(cfg, args):
     tok = extra["token"]
     notice(f"Bericht: {len(rows)} Crafts, {len(spots)} Farmspots (Beute erkannt {found}/{total}), "
            f"{sum(len(g['items']) for g in extra['raw'] or [])} Rohstoffe in {len(extra['raw'] or [])} Gruppen, "
-           f"{len(extra['transmog'] or [])} Transmog-Teile, Nachfrage {mv.demand_hours():.1f} h, "
+           f"{len(extra['transmog'] or [])} Transmog-Teile, {len(extra['volume'] or [])} Volumen-Items, "
+           f"{len(extra['flips'] or [])} Schnäppchen, Nachfrage {mv.demand_hours():.1f} h, "
            f"Marke {money(tok['price']) if tok else '–'}")
     if spots:
         notice("Top-Spots: " + " | ".join(f"{s['name_de'][:40]}: {s['verdict']}" for s in spots[:3]))

@@ -74,6 +74,15 @@ def estimate_sold(prev, current, current_min, gap_h=1.0):
     damit in der Lücke regulär abgelaufene Auktionen nicht als Verkauf gelten.
     """
     allowed = ("VERY_LONG",) if gap_h > 2 else SOLD_TIME_LEFT
+    # Vergleichspreis = günstigste Auktion, die in BEIDEN Scans existiert ("Überlebende").
+    # Neu eingestellte Unterbiet-Angebote verfälschen so die Schätzung nicht.
+    survivors_min = {}
+    for aid, entry in prev.items():
+        now = current.get(aid)
+        if now is not None and len(entry) > 3:
+            item_id, price = entry[0], entry[3]
+            if item_id not in survivors_min or price < survivors_min[item_id]:
+                survivors_min[item_id] = price
     sold = defaultdict(float)
     for aid, entry in prev.items():
         item_id, qty, time_left = entry[0], entry[1], entry[2]
@@ -83,9 +92,15 @@ def estimate_sold(prev, current, current_min, gap_h=1.0):
             if now[1] < qty:
                 sold[item_id] += qty - now[1]
         elif time_left in allowed and price is not None:
-            floor = current_min.get(item_id)
-            if floor is None or price < floor:
-                sold[item_id] += qty
+            floor = survivors_min.get(item_id)
+            if floor is not None:
+                if price <= floor:
+                    sold[item_id] += qty
+            else:
+                # alle alten Auktionen verschwunden -> nur zählen, wenn günstiger als alles Neue
+                new_min = current_min.get(item_id)
+                if new_min is None or price < new_min:
+                    sold[item_id] += qty
     return sold
 
 

@@ -310,7 +310,7 @@ def _section_raw(groups):
 
 def _section_transmog(rows):
     out = ["<section id='transmog'><h2>Transmog-Markt (Dun Morogh)</h2>",
-           "<div class='note'>Tragbare Ausrüstung über 2.000 Gold, die <b>nicht</b> herstellbar ist – also Drops. "
+           "<div class='note'>Tragbare Ausrüstung über 500 Gold, die <b>nicht</b> herstellbar ist – also Drops. "
            "Sobald genug Verlauf da ist, erscheinen hier nur Teile, die sich nachweislich verkaufen. "
            "Klick auf den Namen öffnet Wowhead: dort steht, wo das Teil droppt – so findest du neue Farmziele.</div>"]
     if not rows:
@@ -330,6 +330,75 @@ def _section_transmog(rows):
             _cell(hint or "–", cls="wrapcell"),
         ]) + "</tr>")
     out.append(f"<div class='wrap'><table>{head}<tbody>{''.join(body)}</tbody></table></div></section>")
+    return "".join(out)
+
+
+def _section_volume(vol, recipes):
+    out = ["<section id='volumen'><h2>Volumen: viel Gold mit kleiner Marge</h2>",
+           "<div class='note'>Hier zählt nicht der Stückpreis, sondern der <b>Umsatz pro Tag</b>. Ein Material für 30 Silber, "
+           "von dem täglich 50.000 Stück verkauft werden, bringt mehr als ein Schwert für 300.000 Gold, das niemand "
+           "kauft. Ideal zum Farmen nebenbei: Was du sammelst, wirst du hier garantiert los.</div>"]
+    if vol:
+        rows = []
+        for it in vol:
+            rows.append("<tr>" + "".join([
+                f"<td>{_link(it['item_id'], it['name'])}</td>",
+                _cell(it["kind"]), _cell(it["expansion"]),
+                _cell(money(it["price"]), it["price"], "num"),
+                _cell(_sold(it["sold_per_day"]), it["sold_per_day"] or 0, "num"),
+                _cell(money(it["gold_volume"]), it["gold_volume"] or 0, "num"),
+                _cell(_num(it["supply"], 0), it["supply"], "num"),
+                _cell(_num(it["days_supply"]), it["days_supply"] if it["days_supply"] is not None else 9999, "num"),
+                _cell(it["how"] or "–", cls="wrapcell"),
+            ]) + "</tr>")
+        out.append("<h3>Handelswaren mit dem höchsten Tagesumsatz</h3><div class='wrap'><table><thead><tr><th>Item</th>"
+                   "<th>Art</th><th>Erweiterung</th><th>Preis</th><th>Verkauft/Tag</th><th>Gold-Umsatz/Tag</th>"
+                   "<th>Angebot</th><th>Reicht Tage</th><th>Wie bekommen</th></tr></thead><tbody>"
+                   + "".join(rows) + "</tbody></table></div>")
+    else:
+        out.append("<p class='muted'>Braucht mindestens 3 Stunden Verkaufsdaten.</p>")
+    vc = [r for r in recipes if (r["sold_per_day"] or 0) >= 5 and r["profit"] > 0]
+    vc.sort(key=lambda r: r["potential_per_day"] or 0, reverse=True)
+    if vc:
+        rows = []
+        for r in vc[:80]:
+            rows.append("<tr>" + "".join([
+                f"<td>{_link(r.get('item_id'), r['item'])}</td>", _cell(r["profession"]), _cell(r["tier"]),
+                _cell(money(r["profit"]), r["profit"], "num good"),
+                _cell(_pct(r["margin"]), r["margin"] if r["margin"] is not None else -1, "num"),
+                _cell(_sold(r["sold_per_day"]), r["sold_per_day"] or 0, "num"),
+                _cell(money(r["potential_per_day"]), r["potential_per_day"] or 0, "num"),
+                _cell(money(r["invest"]), r["invest"], "num"),
+            ]) + "</tr>")
+        out.append("<h3>Volumen-Crafts (mind. 5 Verkäufe pro Tag)</h3><div class='wrap'><table><thead><tr><th>Item</th>"
+                   "<th>Beruf</th><th>Erweiterung</th><th>Gewinn/Craft</th><th>Marge</th><th>Verkauft/Tag</th>"
+                   "<th>Potenzial/Tag</th><th>Einsatz/Charge</th></tr></thead><tbody>" + "".join(rows) +
+                   "</tbody></table></div>")
+    out.append("</section>")
+    return "".join(out)
+
+
+def _section_flips(flips):
+    out = ["<section id='schnaeppchen'><h2>Schnäppchen &amp; Flipping</h2>",
+           "<div class='note'>Items, die gerade <b>deutlich unter ihrem 7-Tage-Durchschnitt</b> angeboten werden und sich "
+           "regelmäßig verkaufen. Idee: günstig kaufen, zum normalen Preis wieder einstellen. <i>Gewinn/Stück</i> "
+           "rechnet die 5 % AH-Gebühr schon ab. Wird mit wachsendem Verlauf genauer – vorher mit Vorsicht.</div>"]
+    if not flips:
+        out.append("<p class='muted'>Aktuell keine Schnäppchen gefunden (braucht etwas Preisverlauf).</p></section>")
+        return "".join(out)
+    rows = []
+    for f in flips:
+        rows.append("<tr>" + "".join([
+            f"<td>{_link(f['item_id'], f['name'])}</td>", _cell(f["market"]),
+            _cell(money(f["buy"]), f["buy"], "num"), _cell(money(f["avg"]), f["avg"], "num"),
+            _cell(f"-{f['discount'] * 100:.0f} %", f["discount"], "num good"),
+            _cell(money(f["margin"]), f["margin"], "num"),
+            _cell(_sold(f["sold_per_day"]), f["sold_per_day"] or 0, "num"),
+            _cell(money(f["potential_per_day"]), f["potential_per_day"], "num"),
+        ]) + "</tr>")
+    out.append("<div class='wrap'><table><thead><tr><th>Item</th><th>Markt</th><th>Kaufpreis jetzt</th><th>Ø 7 Tage</th>"
+               "<th>Rabatt</th><th>Gewinn/Stück</th><th>Verkauft/Tag</th><th>Potenzial/Tag</th></tr></thead><tbody>"
+               + "".join(rows) + "</tbody></table></div></section>")
     return "".join(out)
 
 
@@ -363,10 +432,12 @@ def write_html(path, recipes, materials, has_demand, demand_hours, overview, ski
 <style>{CSS}{EXTRA_CSS}</style></head>
 <body><main><h1>Gold-Berater · Dun Morogh</h1>
 <div class="meta">Erstellt {datetime.now():%d.%m.%Y %H:%M} · {scans} · Nachfrage-Zeitraum: {demand_hours:.0f} h · <a href="farmliste_aktuell.txt">Farmliste (Text)</a></div>
-<nav><a href="#uebersicht">Übersicht</a><a href="#farmspots">Farmspots</a><a href="#rohstoffe">Rohstoffe</a><a href="#transmog">Transmog</a><a href="#crafting">Crafting</a></nav>
+<nav><a href="#uebersicht">Übersicht</a><a href="#farmspots">Farmspots</a><a href="#volumen">Volumen</a><a href="#schnaeppchen">Schnäppchen</a><a href="#rohstoffe">Rohstoffe</a><a href="#transmog">Transmog</a><a href="#crafting">Crafting</a></nav>
 {''.join(notes)}
 {_section_overview(extra, recipes, skipped)}
 {_section_spots(extra.get('spots'))}
+{_section_volume(extra.get('volume') or [], recipes)}
+{_section_flips(extra.get('flips') or [])}
 {_section_raw(extra.get('raw'))}
 {_section_transmog(extra.get('transmog') or [])}
 <section id='crafting'><h2>Crafting</h2>
@@ -443,6 +514,10 @@ def write_summary_json(path, recipes, extra, demand_hours):
                                  for it in g["items"]]} for g in (extra.get("raw") or [])],
         "transmog": [{k: it[k] for k in ("name", "item_id", "price", "supply", "sold_per_day")}
                      for it in (extra.get("transmog") or [])],
+        "volumen": [{k: it[k] for k in ("name", "item_id", "kind", "price", "sold_per_day", "gold_volume")}
+                    for it in (extra.get("volume") or [])[:60]],
+        "schnaeppchen": [{k: f[k] for k in ("name", "item_id", "market", "buy", "avg", "margin", "sold_per_day")}
+                         for f in (extra.get("flips") or [])[:40]],
         "crafts": [{k: r.get(k) for k in ("type", "item", "item_id", "profession", "tier", "profit", "sold_per_day",
                                           "invest", "rating")} for r in recipes[:40]],
     }

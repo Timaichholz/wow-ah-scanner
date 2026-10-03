@@ -49,7 +49,7 @@ def _parse_item(data, fallback_id=None):
     }
 
 
-def ensure_items(api, db, ids, max_new=800, workers=8):
+def ensure_items(api, db, ids, max_new=1500, workers=8):
     """Lädt fehlende Item-Metadaten nach (höchstens max_new pro Lauf). Gibt alle bekannten zurück."""
     ids = {int(i) for i in ids if i}
     known = db.get_items(ids)
@@ -78,31 +78,47 @@ def ensure_items(api, db, ids, max_new=800, workers=8):
     return known
 
 
-def resolve_names(api, db, names):
+SEARCH_CACHE_VERSION = "v2:"  # erhöhen, wenn sich die Suchlogik ändert -> alte Fehltreffer werden neu gesucht
+
+
+def resolve_names(api, db, names, max_pages=5):
     """Englische Itemnamen -> Liste von Item-IDs (mehrere bei Qualitätsstufen). Ergebnisse werden gecacht."""
     result = {}
     for name in names:
         key = name.strip().lower()
-        cached = db.get_search(key)
+        cached = db.get_search(SEARCH_CACHE_VERSION + key)
         if cached is not None:
             result[name] = [int(x) for x in str(cached[0] or "").split(",") if x]
             continue
         ids = []
-        if api is not None:
-            try:
-                hits = api.item_search(name)
-            except Exception:  # noqa: BLE001
-                hits = None
-            if hits is None:
-                result[name] = []
-                continue  # Fehler -> nicht cachen, nächster Lauf versucht es erneut
-            for hit in hits:
-                data = hit.get("data") or {}
-                n = data.get("name")
-                en = n.get("en_US") if isinstance(n, dict) else n
-                if en and en.strip().lower() == key:
-                    ids.append(int(data["id"]))
-            db.put_search(key, ",".join(str(i) for i in sorted(set(ids))))
+        failed = api is None
+        # Erst mit dem vollen Namen suchen, dann mit dem längsten (seltensten) Wort als Ausweichsuche
+        words = sorted((w.strip("'\":,") for w in name.split()), key=len, reverse=True)
+        queries = [name] + ([words[0]] if words and words[0].lower() != key else [])
+        for query in queries:
+            if ids or failed:
+                break
+            page, pages = 1, 1
+            while page <= min(pages, max_pages):
+                try:
+                    res = api.item_search(query, page=page)
+                except Exception:  # noqa: BLE001
+                    res = None
+                if res is None:
+                    failed = True
+                    break
+                pages = res.get("pages", 1) or 1
+                for hit in res.get("results", []):
+                    data = hit.get("data") or {}
+                    n = data.get("name")
+                    en = n.get("en_US") if isinstance(n, dict) else n
+                    if en and en.strip().lower() == key:
+                        ids.append(int(data["id"]))
+                if ids:
+                    break  # exakter Treffer gefunden -> weitere Seiten unnötig
+                page += 1
+        if not failed:
+            db.put_search(SEARCH_CACHE_VERSION + key, ",".join(str(i) for i in sorted(set(ids))))
         result[name] = sorted(set(ids))
     return result
 

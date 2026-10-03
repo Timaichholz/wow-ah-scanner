@@ -93,9 +93,14 @@ class DB:
                               [[it.get(f) for f in ITEM_FIELDS] for it in items])
         self.conn.commit()
 
-    def get_search(self, query):
-        row = self.conn.execute("SELECT item_id FROM item_search WHERE query=?", (query,)).fetchone()
-        return row  # None = noch nie gesucht, (None,) = gesucht aber nicht gefunden
+    def get_search(self, query, retry_empty_after_days=3):
+        """None = (erneut) suchen; sonst (ids_text,). Leere Treffer werden nach ein paar Tagen neu gesucht."""
+        row = self.conn.execute("SELECT item_id, fetched_at FROM item_search WHERE query=?", (query,)).fetchone()
+        if row is None:
+            return None
+        if not row[0] and (time.time() - (row[1] or 0)) > retry_empty_after_days * 86400:
+            return None
+        return (row[0],)
 
     def put_search(self, query, item_id):
         self.conn.execute("INSERT OR REPLACE INTO item_search(query,item_id,fetched_at) VALUES (?,?,?)",

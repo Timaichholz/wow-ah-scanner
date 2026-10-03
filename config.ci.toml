@@ -27,8 +27,8 @@ history_days = 7
 retention_days = 10         # kürzer als lokal, damit der Cache klein bleibt
 only_recipe_items = false   # ALLE Items erfassen (auch Weltdrops/Transmog für den Farm-Modus)
 max_gap_hours = 4
-min_profit_gold = 5
-top_n = 80
+min_profit_gold = 1         # auch kleine Margen zeigen – die Masse macht's
+top_n = 300
 crafts_per_recipe = 10
 farm_list_recipes = 20
 competition_threshold = 40
@@ -39,6 +39,10 @@ demand_min_hours = 3
 easy_max_invest_gold = 5000
 easy_min_sold_per_day = 2
 capital_threshold_gold = 50000
+raw_per_group = 30          # Einträge pro Rohstoff-Gruppe
+transmog_limit = 150
+flip_min_discount = 0.15    # Schnäppchen: mindestens 15 % unter dem 7-Tage-Schnitt
+flip_min_sold_per_day = 3
 
 [player]
 # Tätigkeiten, die du ohne Sammelberuf machen kannst (für die Markierung "für dich machbar")

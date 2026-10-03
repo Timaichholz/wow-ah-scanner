@@ -146,8 +146,10 @@ class BlizzardAPI:
     def item(self, item_id):
         return self.get(f"/data/wow/item/{item_id}", "static")
 
-    def item_search(self, name, locale_field="name.en_US"):
-        """Sucht Items über den Namen. Liefert die Rohtreffer der Blizzard-Suche."""
+    def item_search(self, name, locale_field="name.en_US", page=1):
+        """Sucht Items über den Namen. Liefert die Rohtreffer der Blizzard-Suche (eine Seite à 1000)."""
         data = self.get("/data/wow/search/item", "static", with_locale=False,
-                        params={locale_field: name, "orderby": "id", "_page": 1, "_pageSize": 50})
-        return (data or {}).get("results", [])
+                        params={locale_field: name, "orderby": "id", "_page": page, "_pageSize": 1000})
+        if data is None:
+            return None
+        return {"results": data.get("results", []), "pages": data.get("pageCount", 1)}

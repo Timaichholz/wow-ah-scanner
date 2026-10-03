@@ -147,7 +147,8 @@ def analyze_farmspots(api, db, mv, cfg):
 # ---------------------------------------------------------------------------
 # Rohstoffe nach Tätigkeit
 # ---------------------------------------------------------------------------
-def analyze_raw_materials(api, db, mv, cfg, recipes, per_group=10, candidates=700):
+def analyze_raw_materials(api, db, mv, cfg, recipes, per_group=None, candidates=2500):
+    per_group = per_group or int(cfg["analysis"].get("raw_per_group", 30))
     exp_map = item_expansions(recipes or [])
     excluded = {k.lower() for k in cfg["filter"].get("tier_exclude_keywords") or []}
     exclude_midnight = any(k in ("midnight", "quel") for k in excluded)
@@ -197,7 +198,8 @@ def analyze_raw_materials(api, db, mv, cfg, recipes, per_group=10, candidates=70
 # ---------------------------------------------------------------------------
 # Transmog-/BoE-Markt (Realm)
 # ---------------------------------------------------------------------------
-def analyze_transmog(api, db, mv, cfg, recipes, limit=40, candidates=400, min_price_gold=2000):
+def analyze_transmog(api, db, mv, cfg, recipes, limit=None, candidates=600, min_price_gold=500):
+    limit = limit or int(cfg["analysis"].get("transmog_limit", 150))
     crafted = {r.get("crafted_id") for r in recipes or []}
     rows = []
     for item_id, st in mv.latest.items():
@@ -228,6 +230,80 @@ def analyze_transmog(api, db, mv, cfg, recipes, limit=40, candidates=400, min_pr
             "days_supply": st["total_qty"] / sold if sold else None,
             "spread": spread,
         })
+        if len(out) >= limit:
+            break
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Volumen: viel Umsatz, auch bei kleinem Stückpreis
+# ---------------------------------------------------------------------------
+def analyze_volume(api, db, mv, cfg, recipes, limit=100):
+    """Rohstoffe/Handelswaren mit dem höchsten Gold-Umsatz pro Tag – egal wie klein der Stückpreis ist."""
+    exp_map = item_expansions(recipes or [])
+    rows = []
+    for item_id, st in mv.latest.items():
+        if st["source"] != "commodity" or not st.get("market_price"):
+            continue
+        sold = mv.sold_per_day(item_id)
+        if not sold:
+            continue
+        rows.append((st["market_price"] * sold, item_id, st, sold))
+    rows.sort(reverse=True)
+    top = rows[: limit * 2]
+    meta = ensure_items(api, db, [r[1] for r in top])
+    out = []
+    for vol, item_id, st, sold in top:
+        if exp_map.get(item_id) == "Midnight":
+            continue
+        m = meta.get(item_id) or {}
+        act = activity_for(m)
+        out.append({"item_id": item_id, "name": m.get("name") or f"Item {item_id}",
+                    "kind": act[0] if act else (m.get("class_name") or "–"),
+                    "how": act[1] if act else "", "expansion": exp_map.get(item_id, "–"),
+                    "price": st["market_price"], "sold_per_day": sold, "gold_volume": vol,
+                    "supply": st["total_qty"], "days_supply": st["total_qty"] / sold if sold else None})
+        if len(out) >= limit:
+            break
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Schnäppchen / Flipping: unter Durchschnitt kaufen, zum Durchschnitt wieder verkaufen
+# ---------------------------------------------------------------------------
+def analyze_flips(api, db, mv, cfg, recipes, limit=80):
+    a = cfg["analysis"]
+    cut = float(a.get("ah_cut", 0.05))
+    share = float(a.get("market_share", 0.2))
+    min_disc = float(a.get("flip_min_discount", 0.15))
+    min_sold = float(a.get("flip_min_sold_per_day", 3))
+    exp_map = item_expansions(recipes or [])
+    rows = []
+    for item_id, st in mv.latest.items():
+        avg = mv.avg_price(item_id)
+        sold = mv.sold_per_day(item_id)
+        if not avg or not sold or sold < (min_sold if st["source"] == "commodity" else 0.3):
+            continue
+        buy = st.get("market_price") if st["source"] == "commodity" else st.get("min_price")
+        if not buy or buy > avg * (1 - min_disc):
+            continue
+        margin = avg * (1 - cut) - buy
+        if margin <= 0:
+            continue
+        potential = margin * sold * share
+        rows.append((potential, item_id, st, sold, avg, buy, margin))
+    rows.sort(reverse=True)
+    top = rows[: limit * 2]
+    meta = ensure_items(api, db, [r[1] for r in top])
+    out = []
+    for potential, item_id, st, sold, avg, buy, margin in top:
+        if exp_map.get(item_id) == "Midnight":
+            continue
+        m = meta.get(item_id) or {}
+        out.append({"item_id": item_id, "name": m.get("name") or f"Item {item_id}",
+                    "market": "Rohstoff (EU)" if st["source"] == "commodity" else "Realm",
+                    "buy": buy, "avg": avg, "discount": 1 - buy / avg, "margin": margin,
+                    "sold_per_day": sold, "supply": st["total_qty"], "potential_per_day": potential})
         if len(out) >= limit:
             break
     return out
