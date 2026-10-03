@@ -49,7 +49,7 @@ DEFAULTS = {
         "min_auctions": 3,
         "min_sold_per_day": 0.5,
         "min_demand_hours": 12,
-        "demand_min_hours": 3,
+        "demand_min_hours": 2.5,
         "easy_max_invest_gold": 5000,
         "only_recipe_items": False,
         "easy_min_sold_per_day": 2,

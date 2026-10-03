@@ -69,16 +69,27 @@ class ExpResolver:
     def __init__(self, recipes):
         self.ids = item_expansions(recipes or [])
         names = {}
+        # Alles, was in IRGENDEINEM Midnight-Rezept vorkommt, gilt als Midnight (sicher ausblenden)
+        self.midnight_ids, self.midnight_names = set(), set()
         for r in recipes or []:
             exp = expansion_of_tier(r.get("tier"))
             if not exp:
                 continue
+            if exp == "Midnight":
+                self.midnight_ids.update(rg.get("id") for rg in r.get("reagents") or [] if rg.get("id"))
+                self.midnight_ids.add(r.get("crafted_id"))
+                self.midnight_names.update(_norm(n) for n in r.get("slot_names") or [])
+                self.midnight_names.update(_norm(rg.get("name")) for rg in r.get("reagents") or [] if rg.get("name"))
             for n in r.get("slot_names") or []:
                 names.setdefault(_norm(n), {}).setdefault(exp, 0)
                 names[_norm(n)][exp] += 1
         self.names = {k: max(v, key=v.get) for k, v in names.items()}
 
     def get(self, item_id, meta=None):
+        if item_id in self.midnight_ids:
+            return "Midnight"
+        if meta and meta.get("name") and _norm(meta["name"]) in self.midnight_names:
+            return "Midnight"
         exp = self.ids.get(item_id)
         if exp:
             return exp
