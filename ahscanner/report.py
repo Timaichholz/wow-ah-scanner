@@ -66,9 +66,9 @@ def _rating_class(rating):
     return "warn"
 
 
-TYPE_ORDER = ["Easy Money", "Easy Money?", "Solide", "Zeitintensiv", "Kapitalintensiv", "Zeit + Kapital"]
+TYPE_ORDER = ["Easy Money", "Easy Money?", "Solide", "Zeitintensiv", "Kapitalintensiv", "Zeit + Kapital", "Tagesrezept"]
 TYPE_CLASS = {"Easy Money": "good", "Easy Money?": "good", "Zeitintensiv": "warn", "Kapitalintensiv": "warn",
-              "Zeit + Kapital": "bad"}
+              "Zeit + Kapital": "bad", "Tagesrezept": "warn"}
 TYPE_HELP = {
     "Easy Money": "Alle Materialien im AH kaufbar, wenig Startkapital, verkauft sich regelmäßig.",
     "Easy Money?": "Wie Easy Money, aber noch ohne Nachfragedaten – erst bestätigen lassen.",
@@ -76,6 +76,7 @@ TYPE_HELP = {
     "Zeitintensiv": "Mindestens ein Material muss selbst gefarmt werden.",
     "Kapitalintensiv": "Hoher Goldeinsatz pro Charge – nur mit Polster angehen.",
     "Zeit + Kapital": "Farmen UND viel Gold nötig.",
+    "Tagesrezept": "Vermutlich mit Abklingzeit (z. B. Transmutationen) – nur ~1× pro Tag herstellbar.",
 }
 
 

@@ -76,6 +76,17 @@ def _reagent_price(mv, cfg, item_id):
     return None, "farmen"
 
 
+# Die Blizzard-API liefert keine Abklingzeiten. Bekannt sind: alle Transmutationen sowie die Spezialstoffe
+# der Schneiderei und Titanstahl. Bei Letzteren muss das PRODUKT exakt passen (Zauberstoffhose hat z. B. keine).
+COOLDOWN_PRODUCTS = {"mondstoff", "urmondstoff", "schattenstoff", "zauberstoff", "titanstahlbarren"}
+
+
+def has_cooldown(recipe):
+    name = (recipe.get("name") or "").lower()
+    product = (recipe.get("crafted_name") or recipe.get("name") or "").strip().lower()
+    return "transmut" in name or product in COOLDOWN_PRODUCTS
+
+
 def classify(invest, needs_farming, sold, a, cost=None):
     """Ordnet eine Gelegenheit nach Aufwand ein.
 
@@ -192,6 +203,11 @@ def analyze_recipes(recipes, mv, cfg):
 
         days_supply = supply / sold if sold else None
         potential = profit / r["crafted_qty"] * sold * share if sold is not None else None
+        cooldown = has_cooldown(r)
+        if cooldown:
+            # höchstens ein Craft pro Tag -> Potenzial auf einen Craft begrenzen
+            flags.append("vermutlich Abklingzeit (nur ~1× pro Tag herstellbar)")
+            potential = min(potential, profit) if potential is not None else profit
         avg = mv.avg_price(out_id)
         trend = (sell / avg - 1) if avg else None
 
@@ -216,7 +232,7 @@ def analyze_recipes(recipes, mv, cfg):
         batch = int(a["crafts_per_recipe"])
         invest = cost * batch
         needs_farming = any(rg["origin"] == "farmen" for rg in reagents)
-        typ = classify(invest, needs_farming, sold, a, cost)
+        typ = "Tagesrezept" if cooldown else classify(invest, needs_farming, sold, a, cost)
 
         row = {
             "type": typ,
