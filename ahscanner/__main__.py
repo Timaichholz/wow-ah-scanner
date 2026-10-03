@@ -125,8 +125,17 @@ def cmd_report(cfg, args):
            f"Marke {money(tok['price']) if tok else '–'}")
     if spots:
         notice("Top-Spots: " + " | ".join(f"{s['name_de'][:40]}: {s['verdict']}" for s in spots[:3]))
+    def _row(r):
+        sold = f"{r['sold_per_day']:.0f}/T" if r["sold_per_day"] is not None else "?/T"
+        pot = money(r["potential_per_day"]) if r["potential_per_day"] is not None else "–"
+        return (f"{(r['item'] or '')[:28]} [{(r['tier'] or '')[:22]}] G {money(r['profit'])} K {money(r['cost'])} "
+                f"{sold} Ang {r['supply']}/{r['n_auctions']} Pot {pot}")
+    for typ in ("Easy Money", "Solide", "Zeitintensiv"):
+        top = [r for r in rows if r["type"] == typ][:8]
+        if top:
+            notice(f"Top {typ}: " + " | ".join(_row(r) for r in top))
     from .farm import UNMAPPED_TIERS
-    mx = extra.get("matrix") or {}
+    mx =extra.get("matrix") or {}
     exps = [e["expansion"] for e in mx.get("expansions", [])]
     notice(f"Matrix-Erweiterungen: {', '.join(exps) or '–'} | nicht zugeordnete Stufen: "
            f"{'; '.join(sorted(UNMAPPED_TIERS)[:12]) or 'keine'}")
