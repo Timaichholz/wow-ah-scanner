@@ -84,6 +84,7 @@ def estimate_sold(prev, current, current_min, gap_h=1.0):
             if item_id not in survivors_min or price < survivors_min[item_id]:
                 survivors_min[item_id] = price
     sold = defaultdict(float)
+    cheap_gone = defaultdict(list)  # item -> [(preis, menge)] verschwundener günstiger Auktionen
     for aid, entry in prev.items():
         item_id, qty, time_left = entry[0], entry[1], entry[2]
         price = entry[3] if len(entry) > 3 else None
@@ -95,12 +96,23 @@ def estimate_sold(prev, current, current_min, gap_h=1.0):
             floor = survivors_min.get(item_id)
             if floor is not None:
                 if price <= floor:
-                    sold[item_id] += qty
+                    cheap_gone[item_id].append((price, qty))
             else:
                 # alle alten Auktionen verschwunden -> nur zählen, wenn günstiger als alles Neue
                 new_min = current_min.get(item_id)
                 if new_min is None or price < new_min:
-                    sold[item_id] += qty
+                    cheap_gone[item_id].append((price, qty))
+    if cheap_gone:
+        # Abbrechen + günstiger neu einstellen sieht aus wie ein Verkauf. Deshalb neu eingestellte Mengen
+        # im selben Preisbereich abziehen (bewusst vorsichtig: lieber zu wenig als zu viel Absatz).
+        max_price = {item: max(p for p, _ in lst) for item, lst in cheap_gone.items()}
+        relisted = defaultdict(float)
+        for aid, entry in current.items():
+            item_id = entry[0]
+            if item_id in max_price and aid not in prev and len(entry) > 3 and entry[3] <= max_price[item_id]:
+                relisted[item_id] += entry[1]
+        for item_id, lst in cheap_gone.items():
+            sold[item_id] += max(0.0, sum(q for _, q in lst) - relisted[item_id])
     return sold
 
 
