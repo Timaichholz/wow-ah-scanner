@@ -103,7 +103,7 @@ def _recipe_table(rows):
         out.append(f"<tr data-type=\"{html.escape(r['type'])}\">" + "".join([
             _cell(i, i, "num"),
             _cell(r["type"], cls=TYPE_CLASS.get(r["type"], "")),
-            _cell(r["item"]),
+            f"<td>{_link(r.get('item_id'), r['item'])}</td>",
             _cell(r["profession"]),
             _cell(r["tier"]),
             _cell(r["rating"], cls=_rating_class(r["rating"])),
@@ -142,30 +142,237 @@ def _material_table(rows):
     return "".join(out)
 
 
-def write_html(path, recipes, materials, has_demand, demand_hours, overview, skipped):
-    scans = ", ".join(f"{src}: {cnt} Scans" for src, cnt, *_ in overview) or "keine"
+WOWHEAD = "https://www.wowhead.com/de/item={}"
+TYPE_LABEL = {"transmog": "Transmog-Weltdrop", "raid": "Alter Raid", "cloth": "Stoff", "materials": "Materialien",
+              "mixed": "Gemischt"}
+
+
+def _e(v):
+    return html.escape(str(v))
+
+
+def _link(item_id, name):
+    if not item_id:
+        return _e(name)
+    return f"<a href='{WOWHEAD.format(item_id)}' target='_blank' rel='noopener'>{_e(name)}</a>"
+
+
+def _ts(ts):
+    return datetime.fromtimestamp(ts).strftime("%d.%m. %H:%M") if ts else "–"
+
+
+def _sold(v):
+    return "–" if v is None else _num(v)
+
+
+# ---------------------------------------------------------------------------
+# Abschnitte
+# ---------------------------------------------------------------------------
+def _section_goal(tok):
+    if not tok:
+        return "<div class='card'><div class='ctitle'>WoW-Marke</div><div class='muted'>Noch kein Preis erfasst.</div></div>"
+    trend = tok["vs_avg"]
+    hint = ("gerade <b class='good'>günstiger</b> als im 7-Tage-Schnitt – guter Kaufzeitpunkt" if trend < -0.02 else
+            "gerade <b class='warn'>teurer</b> als im 7-Tage-Schnitt – wenn möglich warten" if trend > 0.02 else
+            "liegt im 7-Tage-Schnitt")
+    prog = ""
+    if tok["have"]:
+        pct = min(100, tok["have"] / tok["need"] * 100) if tok["need"] else 0
+        prog = (f"<div class='bar'><span style='width:{pct:.0f}%'></span></div>"
+                f"<div class='small muted'>{money(tok['have'])} von {money(tok['need'])} ({pct:.0f} %) · "
+                f"fehlen {money(tok['missing'])}</div>")
+    return (f"<div class='card'><div class='ctitle'>Ziel: {_e(tok['label'])}</div>"
+            f"<div class='big'>{money(tok['need'])}</div>"
+            f"<div class='small muted'>{tok['tokens']} WoW-Marken × {money(tok['price'])} (Stand {_ts(tok['updated'])})</div>"
+            f"{prog}<div class='small'>Markenpreis {hint}. 7 Tage: {money(tok['min7'])} – {money(tok['max7'])}</div></div>")
+
+
+def _section_health(health, skipped):
+    parts = []
+    names = {"commodity": "Rohstoffe", "realm": "Realm (Ausrüstung)"}
+    warn = False
+    for src, h in health.get("sources", {}).items():
+        gap_cls = "bad" if h["max_gap"] > 4 else "warn" if h["max_gap"] > 2 else "good"
+        warn = warn or h["max_gap"] > 4 or h["age_h"] > 3
+        parts.append(f"<li>{names.get(src, src)}: {h['scans_48h']} Scans in 48 h, letzter {_ts(h['last'])}, "
+                     f"größte Lücke <span class='{gap_cls}'>{h['max_gap']:.1f} h</span></li>")
+    dh = health.get("demand_hours", 0)
+    status = ("<b class='good'>belastbar</b>" if dh >= 24 else "<b class='warn'>vorläufig</b>" if dh >= 3
+              else "<b class='bad'>noch keine</b>")
+    return (f"<div class='card'><div class='ctitle'>Datenstatus</div>"
+            f"<div>Nachfragedaten: {status} ({dh:.0f} h Verlauf)</div><ul class='small'>{''.join(parts)}</ul>"
+            f"<div class='small muted'>Aussortiert: {skipped.get('thin', 0)} unsichere Einzelangebote</div>"
+            + ("<div class='small bad'>Achtung: Lücken im Zeitplan – Verkaufszahlen unvollständig.</div>" if warn else "")
+            + "</div>")
+
+
+def _top_list(title, rows, fmt):
+    items = "".join(f"<li>{fmt(r)}</li>" for r in rows) or "<li class='muted'>noch keine Daten</li>"
+    return f"<div class='card'><div class='ctitle'>{title}</div><ol>{items}</ol></div>"
+
+
+def _section_overview(extra, recipes, skipped):
+    spots = extra.get("spots") or []
+    raw = extra.get("raw") or []
+    tm = extra.get("transmog") or []
+    mine = [it for g in raw if g["mine"] for it in g["items"]]
+    mine.sort(key=lambda it: it["gold_volume"] or 0, reverse=True)
+    easy = [r for r in recipes if r["type"].startswith("Easy")][:5]
+    cards = [
+        _section_goal(extra.get("token")),
+        _section_health(extra.get("health") or {}, skipped),
+        _top_list("Beste Farmspots", spots[:3], lambda s: f"<a href='#spot-{_e(s['id'])}'>{_e(s['name_de'])}</a>"
+                  f"<div class='small muted'>{_e(s['verdict'])} · Marktvolumen {money(s['market_volume_day'])}/Tag</div>"),
+        _top_list("Rohstoffe, die du ohne Sammelberuf farmen kannst", mine[:5],
+                  lambda it: f"{_link(it['item_id'], it['name'])} <span class='muted small'>· {money(it['price'])}"
+                  f" · {_sold(it['sold_per_day'])}/Tag</span>"),
+        _top_list("Transmog, der sich verkauft", tm[:5],
+                  lambda it: f"{_link(it['item_id'], it['name'])} <span class='muted small'>· {money(it['price'])}"
+                  f" · {_sold(it['sold_per_day'])}/Tag</span>"),
+        _top_list("Easy-Money-Crafts", easy,
+                  lambda r: f"{_link(r['item_id'], r['item'])} <span class='muted small'>· {_e(r['profession'])}"
+                  f" · {money(r['profit'])}/Craft</span>"),
+    ]
+    return f"<section id='uebersicht'><h2>Übersicht</h2><div class='cards'>{''.join(cards)}</div></section>"
+
+
+def _section_spots(spots):
+    if not spots:
+        return ""
+    out = ["<section id='farmspots'><h2>Farmspots</h2>",
+           "<div class='note'>Recherchierte Solo-Spots für Level 80 ohne Midnight. Bewertet wird die <b>Beute</b> am "
+           "Markt: aktueller Preis, Angebot und geschätzte Verkäufe pro Tag (Dun Morogh / EU). Wie oft etwas droppt, "
+           "liefert die Blizzard-API nicht – dafür stehen belegte Dropchancen und Quellen dabei. Echte Gold-pro-Stunde-"
+           "Werte entstehen aus deinem Farm-Logbuch (<code>farm_log</code> in der Config).</div>"]
+    for rank, s in enumerate(spots, 1):
+        conf_cls = {"hoch": "good", "mittel": "warn"}.get(s.get("confidence"), "bad")
+        verdict_cls = {"Beute verkauft sich": "good", "Kein Absatz gemessen": "bad",
+                       "Beute aktuell nicht im AH": "bad"}.get(s["verdict"], "warn")
+        rows = []
+        for l in s["loot"]:
+            name = _link(l["item_id"], l["name"]) if l["found"] else f"{_e(l['name_en'])} <span class='bad small'>(nicht gefunden)</span>"
+            rows.append(
+                f"<tr><td>{name}</td><td class='num'>{money(l['price'])}</td><td class='num'>{_num(l['supply'], 0)}</td>"
+                f"<td class='num'>{l['n_auctions']}</td><td class='num'>{_sold(l['sold_per_day'])}</td>"
+                f"<td class='wrapcell'>{_e(l['drop_rate'] or '–')}</td></tr>")
+        gph = ""
+        if s.get("measured_gph"):
+            gph = (f"<div><b>Gemessen:</b> {money(s['measured_gph'])} pro Stunde "
+                   f"({s['log']['sessions']} Sessions, {s['log']['minutes']:.0f} Min.)</div>")
+        sources = " · ".join(f"<a href='{_e(u)}' target='_blank' rel='noopener'>Quelle {i}</a>"
+                             for i, u in enumerate(s.get("sources", []), 1))
+        out.append(f"""<div class='spot card' id='spot-{_e(s['id'])}'>
+<div class='spothead'><span class='rank'>#{rank}</span><div><div class='ctitle'>{_e(s['name_de'])}</div>
+<div class='small muted'>{_e(s.get('zone_de', ''))}{' · ' + _e(s['coords']) if s.get('coords') else ''} · {TYPE_LABEL.get(s.get('type'), _e(s.get('type', '')))}</div></div></div>
+<div class='chips'><span class='chip {verdict_cls}'>{_e(s['verdict'])}</span>
+<span class='chip'>Marktvolumen der Beute: {money(s['market_volume_day'])}/Tag</span>
+<span class='chip'>Wertvollstes Teil: {money(s['top_value'])}</span>
+<span class='chip {conf_cls}'>Verlässlichkeit: {_e(s.get('confidence', '?'))}</span></div>
+{gph}
+<div class='wrap'><table class='mini'><thead><tr><th>Beute</th><th>Preis</th><th>Angebot</th><th>Angebote</th><th>Verkauft/Tag</th><th>Dropchance</th></tr></thead>
+<tbody>{''.join(rows)}</tbody></table></div>
+<details><summary>Anleitung: Anreise, Mobs, Methode</summary>
+<p><b>Anreise:</b> {_e(s.get('travel_de', ''))}</p><p><b>Mobs:</b> {_e(s.get('mobs', ''))}</p>
+<p><b>Methode:</b> {_e(s.get('method_de', ''))}</p><p><b>Vorsicht:</b> {_e(s.get('caveats_de', ''))}</p>
+<p class='small'>{sources}</p></details></div>""")
+    out.append("</section>")
+    return "".join(out)
+
+
+def _section_raw(groups):
+    if not groups:
+        return ""
+    out = ["<section id='rohstoffe'><h2>Rohstoffe nach Tätigkeit</h2>",
+           "<div class='note'>Was sich am Markt bewegt, gruppiert danach, <b>wie</b> man es bekommt. "
+           "<span class='good'>Grün markierte Gruppen</span> kannst du ohne Sammelberuf farmen. Midnight-Materialien "
+           "sind ausgeblendet. <i>Gold-Umsatz/Tag</i> = Preis × geschätzte Verkäufe – je höher, desto sicherer "
+           "wirst du deine Ware los.</div>"]
+    head = "<tr><th>Material</th><th>Erweiterung</th><th>Preis</th><th>Angebot</th><th>Verkauft/Tag</th><th>Gold-Umsatz/Tag</th><th>Reicht Tage</th><th>Preis vs. Ø</th></tr>"
+    for g in groups:
+        rows = []
+        for it in g["items"]:
+            rows.append("<tr>" + "".join([
+                f"<td>{_link(it['item_id'], it['name'])}</td>",
+                _cell(it["expansion"]),
+                _cell(money(it["price"]), it["price"], "num"),
+                _cell(_num(it["supply"], 0), it["supply"], "num"),
+                _cell(_sold(it["sold_per_day"]), it["sold_per_day"] if it["sold_per_day"] is not None else -1, "num"),
+                _cell(money(it["gold_volume"]), it["gold_volume"] if it["gold_volume"] is not None else -1, "num"),
+                _cell(_num(it["days_supply"]), it["days_supply"] if it["days_supply"] is not None else 9999, "num"),
+                _cell(_pct(it["trend"]), it["trend"] if it["trend"] is not None else 0, "num"),
+            ]) + "</tr>")
+        badge = "<span class='chip good'>für dich machbar</span>" if g["mine"] else ""
+        out.append(f"<h3>{_e(g['label'])} <span class='muted small'>· {_e(g['how'])}</span> {badge}</h3>"
+                   f"<div class='wrap'><table>{head}<tbody>{''.join(rows)}</tbody></table></div>")
+    out.append("</section>")
+    return "".join(out)
+
+
+def _section_transmog(rows):
+    out = ["<section id='transmog'><h2>Transmog-Markt (Dun Morogh)</h2>",
+           "<div class='note'>Tragbare Ausrüstung über 2.000 Gold, die <b>nicht</b> herstellbar ist – also Drops. "
+           "Sobald genug Verlauf da ist, erscheinen hier nur Teile, die sich nachweislich verkaufen. "
+           "Klick auf den Namen öffnet Wowhead: dort steht, wo das Teil droppt – so findest du neue Farmziele.</div>"]
+    if not rows:
+        out.append("<p class='muted'>Noch keine Daten.</p></section>")
+        return "".join(out)
+    head = "<tr><th>Item</th><th>Stufe</th><th>Preis</th><th>Angebot</th><th>Verkauft/Tag</th><th>Reicht Tage</th><th>Hinweis</th></tr>"
+    body = []
+    for it in rows:
+        hint = "Preise stark gestreut" if (it["spread"] or 0) > 3 else ""
+        body.append("<tr>" + "".join([
+            f"<td>{_link(it['item_id'], it['name'])}</td>",
+            _cell(it["required_level"] or "–", it["required_level"] or 0, "num"),
+            _cell(money(it["price"]), it["price"], "num"),
+            _cell(it["supply"], it["supply"], "num"),
+            _cell(_sold(it["sold_per_day"]), it["sold_per_day"] if it["sold_per_day"] is not None else -1, "num"),
+            _cell(_num(it["days_supply"]), it["days_supply"] if it["days_supply"] is not None else 9999, "num"),
+            _cell(hint or "–", cls="wrapcell"),
+        ]) + "</tr>")
+    out.append(f"<div class='wrap'><table>{head}<tbody>{''.join(body)}</tbody></table></div></section>")
+    return "".join(out)
+
+
+EXTRA_CSS = """
+nav{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);display:flex;gap:6px;flex-wrap:wrap;padding:8px 0;margin-bottom:8px}
+nav a{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:999px;padding:4px 12px;text-decoration:none;font-size:13px}
+a{color:var(--accent)}h3{font-size:15px;margin:22px 0 6px}section{scroll-margin-top:56px}
+.big{font-size:26px;font-weight:700;margin:4px 0}.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:6px 0}
+.bar span{display:block;height:100%;background:var(--good)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.chip{border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12px}
+.spot{margin:14px 0}.spothead{display:flex;gap:12px;align-items:center}.rank{font-size:22px;font-weight:700;color:var(--accent);min-width:42px}
+table.mini{min-width:640px}details{margin-top:8px}summary{cursor:pointer;color:var(--accent)}details p{margin:6px 0}
+code{background:var(--line);padding:0 4px;border-radius:3px}
+@media (max-width:600px){h1{font-size:20px}.big{font-size:22px}}
+"""
+
+
+def write_html(path, recipes, materials, has_demand, demand_hours, overview, skipped, extra=None):
+    extra = extra or {}
+    scans = ", ".join(f"{ {'commodity': 'Rohstoffe', 'realm': 'Realm'}.get(src, src)}: {cnt} Scans"
+                      for src, cnt, *_ in overview) or "keine"
     notes = []
-    if skipped.get("thin") or skipped.get("no_sales"):
-        notes.append(f"<div class='note'>Aussortiert: <b>{skipped.get('thin', 0)}</b> Einzelangebote mit unsicherem Preis "
-                     f"(zu wenige Angebote und kein Verkaufsnachweis) und <b>{skipped.get('no_sales', 0)}</b> Items ohne "
-                     "Verkäufe im Zeitraum.</div>")
-    if not has_demand:
-        notes.append("<div class='note'><b>Noch keine Nachfragedaten.</b> Die Verkäufe werden aus dem Vergleich "
-                     "zweier Scans geschätzt. Lass den Dauerscan ein paar Stunden laufen (ideal: 1–2 Tage), "
-                     "bis dahin ist die Liste nur nach Gewinn pro Craft sortiert.</div>")
+    if demand_hours < 3:
+        notes.append("<div class='note'><b>Noch keine Nachfragedaten.</b> Verkäufe werden aus dem Vergleich "
+                     "aufeinanderfolgender Scans geschätzt. Bis dahin sind alle Listen nur nach Preis sortiert.</div>")
     elif demand_hours < 24:
         notes.append(f"<div class='note'>Nachfragedaten decken erst {demand_hours:.0f} Stunden ab – "
                      "Tageszeit-Schwankungen sind noch nicht ausgeglichen.</div>")
     doc = f"""<!doctype html><html lang="de"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>AH-Scanner Bericht</title><style>{CSS}</style></head>
-<body><main><h1>AH-Scanner – Was lohnt sich zu craften?</h1>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Gold-Berater</title>
+<style>{CSS}{EXTRA_CSS}</style></head>
+<body><main><h1>Gold-Berater · Dun Morogh</h1>
 <div class="meta">Erstellt {datetime.now():%d.%m.%Y %H:%M} · {scans} · Nachfrage-Zeitraum: {demand_hours:.0f} h · <a href="farmliste_aktuell.txt">Farmliste (Text)</a></div>
+<nav><a href="#uebersicht">Übersicht</a><a href="#farmspots">Farmspots</a><a href="#rohstoffe">Rohstoffe</a><a href="#transmog">Transmog</a><a href="#crafting">Crafting</a></nav>
 {''.join(notes)}
-<div class="note"><b>So liest du die Tabelle:</b> <i>Potenzial/Tag</i> = Gewinn pro Stück × geschätzte Verkäufe pro Tag ×
-dein angenommener Marktanteil. <i>Reicht Tage</i> = wie lange das aktuelle Angebot bei der jetzigen Nachfrage hält
-(klein = knapp = gut). Spaltenköpfe anklicken zum Sortieren.</div>
-<h2>Empfohlene Crafts</h2>{_summary(recipes)}<div class="wrap">{_recipe_table(recipes)}</div>
-<h2>Materialien mit dem meisten Umsatz (Farm-Ziele)</h2><div class="wrap">{_material_table(materials)}</div>
+{_section_overview(extra, recipes, skipped)}
+{_section_spots(extra.get('spots'))}
+{_section_raw(extra.get('raw'))}
+{_section_transmog(extra.get('transmog') or [])}
+<section id='crafting'><h2>Crafting</h2>
+<div class="note"><i>Potenzial/Tag</i> = Gewinn pro Stück × geschätzte Verkäufe pro Tag × angenommener Marktanteil.
+<i>Reicht Tage</i> = wie lange das Angebot bei der jetzigen Nachfrage hält (klein = knapp = gut). Spaltenköpfe anklicken zum Sortieren.</div>
+{_summary(recipes)}<div class="wrap">{_recipe_table(recipes)}</div></section>
 </main><script>{JS}</script></body></html>"""
     path.write_text(doc, encoding="utf-8")
 
@@ -214,10 +421,39 @@ def write_farm_list(path, recipes, cfg, demand_hours):
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def write_reports(recipes, materials, has_demand, demand_hours, overview, cfg, skipped=None):
+def write_summary_json(path, recipes, extra, demand_hours):
+    """Kompakte Zusammenfassung als JSON – zum Weiterverarbeiten (z. B. durch Claude)."""
+    import json
+
+    def slim_spot(s):
+        base = {k: s.get(k) for k in ("id", "name_de", "verdict", "market_volume_day", "top_value", "n_selling",
+                                      "confidence", "measured_gph")}
+        base["loot"] = [{k: l.get(k) for k in ("name", "name_en", "item_id", "price", "supply", "sold_per_day")}
+                        for l in s.get("loot", [])]
+        return base
+
+    data = {
+        "erstellt": datetime.now().isoformat(timespec="minutes"),
+        "nachfrage_stunden": round(demand_hours, 1),
+        "marke": extra.get("token"),
+        "datenstatus": extra.get("health"),
+        "farmspots": [slim_spot(s) for s in (extra.get("spots") or [])],
+        "rohstoffe": [{"gruppe": g["label"], "fuer_dich": g["mine"],
+                       "items": [{k: it[k] for k in ("name", "item_id", "expansion", "price", "sold_per_day", "gold_volume")}
+                                 for it in g["items"]]} for g in (extra.get("raw") or [])],
+        "transmog": [{k: it[k] for k in ("name", "item_id", "price", "supply", "sold_per_day")}
+                     for it in (extra.get("transmog") or [])],
+        "crafts": [{k: r.get(k) for k in ("type", "item", "item_id", "profession", "tier", "profit", "sold_per_day",
+                                          "invest", "rating")} for r in recipes[:40]],
+    }
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+
+
+def write_reports(recipes, materials, has_demand, demand_hours, overview, cfg, skipped=None, extra=None):
     stamp = time.strftime("%Y-%m-%d_%H%M")
     html_path = OUTPUT_DIR / f"bericht_{stamp}.html"
-    write_html(html_path, recipes, materials, has_demand, demand_hours, overview, skipped or {})
+    write_html(html_path, recipes, materials, has_demand, demand_hours, overview, skipped or {}, extra)
+    write_summary_json(OUTPUT_DIR / "daten.json", recipes, extra or {}, demand_hours)
     write_csv(OUTPUT_DIR / f"crafts_{stamp}.csv", recipes,
               ["type", "item", "item_id", "recipe", "profession", "tier", "category", "rating", "sell_price", "cost", "profit",
                "invest", "supply", "n_auctions", "sold_per_day", "days_supply", "potential_per_day", "flags"])

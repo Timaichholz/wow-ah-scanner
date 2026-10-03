@@ -4,7 +4,7 @@ name: AH-Scan
 # Bewusst KEIN "pull_request"-Trigger -> fremde Forks/PRs können ihn nie mit den Secrets ausführen.
 on:
   schedule:
-    - cron: "17 * * * *"   # jede Stunde zur Minute 17 (UTC)
+    - cron: "17,47 * * * *"   # zweimal pro Stunde (UTC) – fällt ein Lauf aus, fängt der nächste ihn auf
   workflow_dispatch:        # manuell starten über "Run workflow"
 
 permissions:

@@ -24,9 +24,9 @@ only_known_recipes = false
 ah_cut = 0.05
 market_share = 0.2
 history_days = 7
-retention_days = 14         # kürzer als lokal, damit der Cache klein bleibt
-only_recipe_items = true    # nur Items speichern, die in Rezepten vorkommen
-max_gap_hours = 3
+retention_days = 10         # kürzer als lokal, damit der Cache klein bleibt
+only_recipe_items = false   # ALLE Items erfassen (auch Weltdrops/Transmog für den Farm-Modus)
+max_gap_hours = 4
 min_profit_gold = 5
 top_n = 80
 crafts_per_recipe = 10
@@ -39,5 +39,21 @@ demand_min_hours = 3
 easy_max_invest_gold = 5000
 easy_min_sold_per_day = 2
 capital_threshold_gold = 50000
+
+[player]
+# Tätigkeiten, die du ohne Sammelberuf machen kannst (für die Markierung "für dich machbar")
+activities = ["Stoff", "Verzauberung", "Fleisch & Fisch", "Elementar"]
+
+[goal]
+label = "Midnight (Basisedition)"
+price_eur = 49.99
+balance_per_token_eur = 12.99
+current_gold = 0            # optional: dein aktuelles Gold, dann zeigt der Bericht den Fortschritt
+
+# Farm-Logbuch (optional): nach einer Session hier eintragen -> echtes Gold pro Stunde pro Spot
+# [[farm_log]]
+# spot = "stormsong-glazer"   # id aus farmspots.json
+# minutes = 60
+# gold = 15000                # Gesamtwert der Beute (AH-Preise) + Rohgold
 
 [vendor_prices]

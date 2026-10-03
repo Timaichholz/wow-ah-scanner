@@ -61,7 +61,7 @@ def parse_auctions(auctions):
     return current, per_item
 
 
-def estimate_sold(prev, current, current_min):
+def estimate_sold(prev, current, current_min, gap_h=1.0):
     """Schätzt Verkäufe aus dem Vergleich zweier Snapshots.
 
     Gezählt wird nur, was mit hoher Wahrscheinlichkeit gekauft wurde:
@@ -70,7 +70,10 @@ def estimate_sold(prev, current, current_min):
       was jetzt noch im AH steht. Käufer nehmen immer das günstigste Angebot;
       abgebrochene/neu eingestellte Auktionen (Unterbieten) liegen dagegen typischerweise
       nicht unter dem neuen Mindestpreis und werden so nicht mehr als Verkauf gezählt.
+    Bei größeren Lücken (> 2 h) zählen nur noch "VERY_LONG"-Auktionen (12–48 h Restlaufzeit),
+    damit in der Lücke regulär abgelaufene Auktionen nicht als Verkauf gelten.
     """
+    allowed = ("VERY_LONG",) if gap_h > 2 else SOLD_TIME_LEFT
     sold = defaultdict(float)
     for aid, entry in prev.items():
         item_id, qty, time_left = entry[0], entry[1], entry[2]
@@ -79,7 +82,7 @@ def estimate_sold(prev, current, current_min):
         if now is not None:
             if now[1] < qty:
                 sold[item_id] += qty - now[1]
-        elif time_left in SOLD_TIME_LEFT and price is not None:
+        elif time_left in allowed and price is not None:
             floor = current_min.get(item_id)
             if floor is None or price < floor:
                 sold[item_id] += qty
@@ -111,7 +114,7 @@ def process_snapshot(db, source, ts, auctions, cfg, keep=None):
                 interval = gap
 
     current_min = {item: min(p for p, _ in lst) for item, lst in per_item.items() if lst}
-    sold = estimate_sold(prev, current, current_min) if prev is not None else {}
+    sold = estimate_sold(prev, current, current_min, interval or 1.0) if prev is not None else {}
 
     rows = []
     for item_id in set(per_item) | set(sold):
@@ -156,7 +159,23 @@ def _relevant_items():
     return keep
 
 
+def record_token(api, db):
+    """Preis der WoW-Marke mitschreiben. Fehler hier dürfen den Scan nie stoppen."""
+    try:
+        data = api.wow_token()
+    except Exception as exc:  # noqa: BLE001
+        print(f"Hinweis: WoW-Marken-Preis nicht abrufbar ({exc}).")
+        return None
+    if not data or "price" not in data:
+        return None
+    ts = int(data.get("last_updated_timestamp", time.time() * 1000) / 1000)
+    db.put_token(ts, int(data["price"]))
+    print(f"WoW-Marke: {int(data['price']) // 10000:,} Gold".replace(",", "."))
+    return int(data["price"])
+
+
 def run_scan(api, cfg, db):
+    record_token(api, db)
     keep = _relevant_items() if cfg["analysis"].get("only_recipe_items") else None
     sources = [("commodity", "Rohstoffe (regionsweit)", api.commodities)]
     realm_slug = cfg["realm"].get("slug")

@@ -18,7 +18,24 @@ Einmalig einrichten:
 2. **Actions → AH-Scan → Run workflow** für den ersten Lauf (lädt einmalig alle Rezepte, dauert ca. 10–15 Minuten).
 
 Einstellungen für den Cloud-Lauf stehen in `config.ci.toml` (öffentlich sichtbar, daher **nie** Secrets dort eintragen).
-Die Datenbank wird zwischen den Läufen im Actions-Cache gespeichert und hält 14 Tage Verlauf.
+Die Datenbank wird zwischen den Läufen im Actions-Cache gespeichert und hält 10 Tage Verlauf.
+Der Zeitplan läuft zweimal pro Stunde, damit ausgelassene Läufe von GitHub keine Datenlücken reißen.
+
+## Was der Bericht zeigt
+
+| Bereich | Inhalt |
+|---|---|
+| **Übersicht** | Goldbedarf für Midnight (aktueller WoW-Marken-Preis × benötigte Marken), Datenstatus, Top-Farmspots, Top-Rohstoffe, Transmog und Easy-Money-Crafts |
+| **Farmspots** | Recherchierte Solo-Spots aus `farmspots.json`, bewertet nach dem aktuellen Marktwert und Absatz ihrer Beute, mit Anreise, Methode, Dropchancen und Quellen |
+| **Rohstoffe nach Tätigkeit** | Stoff, Leder, Erz, Kräuter, Entzaubern, Fleisch/Fisch, Elementar – was sich am meisten umsetzt, Midnight-Materialien ausgeblendet |
+| **Transmog-Markt** | Nicht herstellbare Ausrüstung über 2.000 Gold, die sich auf dem Realm verkauft (mit Wowhead-Link zur Dropquelle) |
+| **Crafting** | Profitable Rezepte, eingeordnet als Easy Money / Solide / Zeit- / Kapitalintensiv |
+
+**Eigene Farmspots ergänzen:** einen Eintrag in `farmspots.json` hinzufügen, Beute mit **englischem** Itemnamen
+(wie auf Wowhead). Das Tool findet die Items selbst über die Blizzard-Suche.
+
+**Echtes Gold pro Stunde:** Nach einer Farm-Session in `config.ci.toml` unter `[[farm_log]]` Spot-ID, Minuten und Gold
+eintragen – der Bericht zeigt dann pro Spot den gemessenen Wert.
 
 ---
 

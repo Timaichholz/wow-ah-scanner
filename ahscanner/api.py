@@ -72,9 +72,11 @@ class BlizzardAPI:
             self._token_exp = time.time() + int(data.get("expires_in", 3600))
             return self._token
 
-    def get(self, path, namespace, params=None, raw=False, timeout=60):
+    def get(self, path, namespace, params=None, raw=False, timeout=60, with_locale=True):
         url = self.base + path
-        query = {"namespace": f"{namespace}-{self.region}", "locale": self.locale}
+        query = {"namespace": f"{namespace}-{self.region}"}
+        if with_locale:
+            query["locale"] = self.locale
         if params:
             query.update(params)
         last_status = None
@@ -135,3 +137,17 @@ class BlizzardAPI:
 
     def character_professions(self, realm_slug, name):
         return self.get(f"/profile/wow/character/{realm_slug}/{name.lower()}/professions", "profile")
+
+    # --- Marke, Items, Suche ---------------------------------------------
+    def wow_token(self):
+        """Aktueller Preis der WoW-Marke in Kupfer (regionsweit)."""
+        return self.get("/data/wow/token/index", "dynamic")
+
+    def item(self, item_id):
+        return self.get(f"/data/wow/item/{item_id}", "static")
+
+    def item_search(self, name, locale_field="name.en_US"):
+        """Sucht Items über den Namen. Liefert die Rohtreffer der Blizzard-Suche."""
+        data = self.get("/data/wow/search/item", "static", with_locale=False,
+                        params={locale_field: name, "orderby": "id", "_page": 1, "_pageSize": 50})
+        return (data or {}).get("results", [])

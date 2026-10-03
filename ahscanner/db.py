@@ -22,10 +22,38 @@ CREATE TABLE IF NOT EXISTS item_stats (
     PRIMARY KEY (snapshot_id, item_id)
 );
 CREATE INDEX IF NOT EXISTS idx_stats_item ON item_stats(item_id);
+CREATE TABLE IF NOT EXISTS items (
+    item_id INTEGER PRIMARY KEY,
+    name TEXT,
+    name_en TEXT,
+    quality TEXT,
+    class_id INTEGER,
+    class_name TEXT,
+    subclass_id INTEGER,
+    subclass_name TEXT,
+    item_level INTEGER,
+    required_level INTEGER,
+    binding TEXT,
+    equippable INTEGER,
+    vendor_buy INTEGER,
+    vendor_sell INTEGER,
+    fetched_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS item_search (
+    query TEXT PRIMARY KEY,
+    item_id INTEGER,
+    fetched_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS token_prices (
+    ts INTEGER PRIMARY KEY,
+    price INTEGER NOT NULL
+);
 """
 
+ITEM_FIELDS = ["item_id", "name", "name_en", "quality", "class_id", "class_name", "subclass_id", "subclass_name",
+               "item_level", "required_level", "binding", "equippable", "vendor_buy", "vendor_sell", "fetched_at"]
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class DB:
@@ -33,15 +61,58 @@ class DB:
         self.conn = sqlite3.connect(str(path))
         self.conn.executescript(SCHEMA)
         version = self.conn.execute("PRAGMA user_version").fetchone()[0]
-        if version < SCHEMA_VERSION:
-            # Verkaufsschätzungen aus älteren Versionen waren zu hoch -> verwerfen, Preise behalten
+        if version < 2:
+            # Verkaufsschätzungen aus Version 1 waren zu hoch -> verwerfen, Preise behalten
             self.conn.execute("UPDATE item_stats SET sold_est=NULL")
             self.conn.execute("UPDATE snapshots SET interval_h=NULL")
+        if version < SCHEMA_VERSION:
             self.conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
             self.conn.commit()
 
     def close(self):
         self.conn.close()
+
+    # --- Item-Metadaten ---------------------------------------------------
+    def get_items(self, ids=None):
+        cols = ",".join(ITEM_FIELDS)
+        if ids is None:
+            rows = self.conn.execute(f"SELECT {cols} FROM items").fetchall()
+        else:
+            ids = list(ids)
+            rows = []
+            for i in range(0, len(ids), 500):
+                chunk = ids[i:i + 500]
+                q = ",".join("?" * len(chunk))
+                rows += self.conn.execute(f"SELECT {cols} FROM items WHERE item_id IN ({q})", chunk).fetchall()
+        return {r[0]: dict(zip(ITEM_FIELDS, r)) for r in rows}
+
+    def put_items(self, items):
+        cols = ",".join(ITEM_FIELDS)
+        q = ",".join("?" * len(ITEM_FIELDS))
+        self.conn.executemany(f"INSERT OR REPLACE INTO items({cols}) VALUES ({q})",
+                              [[it.get(f) for f in ITEM_FIELDS] for it in items])
+        self.conn.commit()
+
+    def get_search(self, query):
+        row = self.conn.execute("SELECT item_id FROM item_search WHERE query=?", (query,)).fetchone()
+        return row  # None = noch nie gesucht, (None,) = gesucht aber nicht gefunden
+
+    def put_search(self, query, item_id):
+        self.conn.execute("INSERT OR REPLACE INTO item_search(query,item_id,fetched_at) VALUES (?,?,?)",
+                          (query, item_id, int(time.time())))
+        self.conn.commit()
+
+    # --- WoW-Marke --------------------------------------------------------
+    def put_token(self, ts, price):
+        self.conn.execute("INSERT OR IGNORE INTO token_prices(ts,price) VALUES (?,?)", (ts, price))
+        self.conn.commit()
+
+    def token_history(self, cutoff_ts):
+        return self.conn.execute("SELECT ts, price FROM token_prices WHERE ts>=? ORDER BY ts", (cutoff_ts,)).fetchall()
+
+    def snapshot_times(self, source, cutoff_ts):
+        return self.conn.execute("SELECT ts, interval_h FROM snapshots WHERE source=? AND ts>=? ORDER BY ts",
+                                 (source, cutoff_ts)).fetchall()
 
     def has_snapshot(self, source, ts):
         row = self.conn.execute("SELECT 1 FROM snapshots WHERE source=? AND ts=?", (source, ts)).fetchone()

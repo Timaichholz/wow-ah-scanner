@@ -76,7 +76,7 @@ def _reagent_price(mv, cfg, item_id):
     return None, "farmen"
 
 
-def classify(invest, needs_farming, sold, a):
+def classify(invest, needs_farming, sold, a, cost=None):
     """Ordnet eine Gelegenheit nach Aufwand ein.
 
     Easy Money    – alle Materialien im AH kaufbar, wenig Startkapital, verkauft sich regelmäßig
@@ -94,6 +94,8 @@ def classify(invest, needs_farming, sold, a):
         return "Zeitintensiv"
     if high_capital:
         return "Kapitalintensiv"
+    if not cost:
+        return "Solide"  # Kosten unbekannt -> nie als Easy Money einstufen
     if invest <= easy_invest and (sold is None or sold >= easy_sold):
         return "Easy Money" if sold is not None else "Easy Money?"
     return "Solide"
@@ -173,8 +175,13 @@ def analyze_recipes(recipes, mv, cfg):
             reagents.append({**rg, "unit_price": price, "origin": origin, "line_cost": line_cost})
         if any(rg["origin"] == "farmen" for rg in reagents):
             flags.append("Material nicht im AH – selbst farmen")
+        if cost == 0:
+            flags.append("Kosten unbekannt – Gewinn überschätzt")
         if r["has_modified_slots"]:
             flags.append("Qualitäts-/Optional-Slots – Kosten evtl. unvollständig")
+        if st and st.get("source") == "realm" and st.get("min_price") and st.get("median_price") \
+                and st["median_price"] > 3 * st["min_price"]:
+            flags.append("Preise stark gestreut (evtl. verschiedene Gegenstandsstufen)")
 
         revenue = sell * r["crafted_qty"] * (1 - cut)
         profit = revenue - cost
@@ -207,7 +214,7 @@ def analyze_recipes(recipes, mv, cfg):
         batch = int(a["crafts_per_recipe"])
         invest = cost * batch
         needs_farming = any(rg["origin"] == "farmen" for rg in reagents)
-        typ = classify(invest, needs_farming, sold, a)
+        typ = classify(invest, needs_farming, sold, a, cost)
 
         row = {
             "type": typ,
@@ -258,8 +265,8 @@ def analyze_materials(all_recipes, mv, cfg, limit=60):
     rows = []
     for item_id, name in names.items():
         st = mv.stats(item_id)
-        if not st or not st["market_price"]:
-            continue
+        if not st or not st["market_price"] or st.get("source") != "commodity":
+            continue  # nur echte Rohstoffe (regionsweit gehandelt), keine Ausrüstung
         sold = mv.sold_per_day(item_id)
         avg = mv.avg_price(item_id)
         price = st["market_price"]

@@ -40,7 +40,7 @@ DEFAULTS = {
         "market_share": 0.2,
         "history_days": 7,
         "retention_days": 30,
-        "max_gap_hours": 3,
+        "max_gap_hours": 4,
         "min_profit_gold": 5,
         "top_n": 50,
         "crafts_per_recipe": 10,
@@ -56,6 +56,9 @@ DEFAULTS = {
         "capital_threshold_gold": 50000,
     },
     "watch": {"interval_minutes": 60, "report_every_scan": True},
+    "player": {"activities": ["Stoff", "Verzauberung", "Fleisch & Fisch", "Elementar"]},
+    "goal": {"label": "Midnight", "price_eur": 49.99, "balance_per_token_eur": 12.99, "current_gold": 0},
+    "farm_log": [],
     "vendor_prices": {},
 }
 
