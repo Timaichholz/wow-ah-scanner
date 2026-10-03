@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS token_prices (
 ITEM_FIELDS = ["item_id", "name", "name_en", "quality", "class_id", "class_name", "subclass_id", "subclass_name",
                "item_level", "required_level", "binding", "equippable", "vendor_buy", "vendor_sell", "fetched_at"]
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class DB:
@@ -61,8 +61,9 @@ class DB:
         self.conn = sqlite3.connect(str(path))
         self.conn.executescript(SCHEMA)
         version = self.conn.execute("PRAGMA user_version").fetchone()[0]
-        if version < 2:
-            # Verkaufsschätzungen aus Version 1 waren zu hoch -> verwerfen, Preise behalten
+        if version < 4:
+            # Verkaufsschätzungen älterer Versionen (ohne Abbrechen/Neu-Einstellen-Korrektur) verwerfen,
+            # gesammelte Preise bleiben erhalten
             self.conn.execute("UPDATE item_stats SET sold_est=NULL")
             self.conn.execute("UPDATE snapshots SET interval_h=NULL")
         if version < SCHEMA_VERSION:
