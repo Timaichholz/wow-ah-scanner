@@ -417,7 +417,9 @@ def _section_matrix(mx):
            "<div class='note'>Für jede Erweiterung: wie viel Gold die Waren eines Berufs <b>pro Tag am Markt umsetzen</b> "
            "(Sammeln) bzw. wie viel Gewinn-Potenzial die profitablen Rezepte haben (Herstellen). Je grüner, desto mehr "
            "Geld bewegt sich dort. Das ist der Markt, nicht dein persönlicher Stundenlohn – der hängt von Spot und "
-           "Tempo ab. Ohne Nachfragedaten zeigen die Zellen den mittleren Stückpreis.</div>"]
+           "Tempo ab. Ohne Nachfragedaten zeigen die Zellen den mittleren Stückpreis. <b>Grenze:</b> Für Rezepte ab "
+           "Dragonflight liefert Blizzard die Qualitätsmaterialien ohne Item-Nummern – deren Herstellkosten sind nicht "
+           "berechenbar, daher bleibt „Herstellen“ dort meist leer. Die Materialien selbst werden erfasst.</div>"]
     # --- Sammeln
     gcols = mx["gather_cols"]
     vmax = max((c["volume"] for e in exps for c in e["gather"].values() if c), default=0)
