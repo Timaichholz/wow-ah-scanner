@@ -76,11 +76,20 @@ jobs:
         id: deploy
         uses: actions/deploy-pages@v4
 
-      # GitHubs Zeitpläne lassen Läufe oft ausfallen. Deshalb startet jeder Lauf nach einer Wartezeit
-      # den nächsten selbst (Kette). Der Zeitplan oben bleibt als Sicherheitsnetz, falls die Kette reißt.
-      # Läuft oder wartet bereits ein anderer Lauf, wird KEIN neuer gestartet -> nie zwei Ketten parallel.
+  # GitHubs Zeitpläne lassen Läufe oft ausfallen. Deshalb startet jeder Lauf nach einer Wartezeit
+  # den nächsten selbst (Kette). Der Zeitplan oben bleibt als Sicherheitsnetz, falls die Kette reißt.
+  # Läuft oder wartet bereits ein anderer Lauf, wird KEIN neuer gestartet -> nie zwei Ketten parallel.
+  # Eigener Job: Der Scan-Job ist so sofort abgeschlossen (Ergebnis/Hinweise direkt sichtbar),
+  # und dieser Job hat keinen Zugriff auf die Blizzard-Secrets.
+  chain:
+    needs: scan
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      actions: write
+    steps:
       - name: Nächsten Lauf planen (in ca. 45 Minuten)
-        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
