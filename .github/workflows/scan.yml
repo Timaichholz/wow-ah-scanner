@@ -1,7 +1,8 @@
 name: AH-Scan
 
-# Sicherheit: Der Workflow startet NUR per Zeitplan oder manuell durch den Repo-Besitzer.
-# Bewusst KEIN "pull_request"-Trigger -> fremde Forks/PRs können ihn nie mit den Secrets ausführen.
+# Sicherheit: Der Workflow startet NUR per Zeitplan, manuell durch den Repo-Besitzer oder durch sich selbst
+# (Kette, siehe letzter Schritt). Bewusst KEIN "pull_request"-Trigger -> fremde Forks/PRs können ihn nie
+# mit den Secrets ausführen.
 on:
   schedule:
     - cron: "17,47 * * * *"   # zweimal pro Stunde (UTC) – fällt ein Lauf aus, fängt der nächste ihn auf
@@ -11,6 +12,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  actions: write   # nur, damit der Lauf am Ende den nächsten Lauf dieses Workflows starten kann
 
 concurrency:
   group: ah-scan
@@ -19,7 +21,7 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -73,3 +75,22 @@ jobs:
       - name: Auf GitHub Pages veröffentlichen
         id: deploy
         uses: actions/deploy-pages@v4
+
+      # GitHubs Zeitpläne lassen Läufe oft ausfallen. Deshalb startet jeder Lauf nach einer Wartezeit
+      # den nächsten selbst (Kette). Der Zeitplan oben bleibt als Sicherheitsnetz, falls die Kette reißt.
+      # Läuft oder wartet bereits ein anderer Lauf, wird KEIN neuer gestartet -> nie zwei Ketten parallel.
+      - name: Nächsten Lauf planen (in ca. 45 Minuten)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SELF: ${{ github.run_id }}
+        run: |
+          sleep 2700
+          others=$(gh api "repos/$REPO/actions/workflows/scan.yml/runs?per_page=20" \
+            --jq "[.workflow_runs[] | select(.id != $SELF) | select(.status != \"completed\")] | length")
+          if [ "$others" = "0" ]; then
+            gh workflow run scan.yml --ref main -R "$REPO" && echo "Nächster Lauf gestartet."
+          else
+            echo "Es läuft oder wartet bereits ein anderer Lauf ($others) – keine zusätzliche Kette."
+          fi

@@ -19,7 +19,7 @@ Einmalig einrichten:
 
 Einstellungen für den Cloud-Lauf stehen in `config.ci.toml` (öffentlich sichtbar, daher **nie** Secrets dort eintragen).
 Die Datenbank wird zwischen den Läufen im Actions-Cache gespeichert und hält 10 Tage Verlauf.
-Der Zeitplan läuft zweimal pro Stunde, damit ausgelassene Läufe von GitHub keine Datenlücken reißen.
+Jeder Lauf startet nach ca. 45 Minuten den nächsten selbst (GitHubs Zeitpläne lassen Läufe oft ausfallen). Der Zeitplan zweimal pro Stunde dient nur noch als Sicherheitsnetz, falls die Kette reißt.
 
 ## Was der Bericht zeigt
 
