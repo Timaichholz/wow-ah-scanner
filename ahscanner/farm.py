@@ -101,6 +101,8 @@ class ExpResolver:
             return "Dragonflight"
         if item_id and 210000 <= item_id < 236000:
             return "The War Within"
+        if item_id and item_id >= 236000:
+            return "Midnight"  # neuere Item-Nummern ohne Rezeptbezug -> sehr wahrscheinlich Midnight
         return None
 
 
