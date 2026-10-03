@@ -26,11 +26,21 @@ EXPANSIONS = [
 CONF_WEIGHT = {"hoch": 1.0, "mittel": 0.8, "niedrig": 0.5}
 
 
+def _norm(text):
+    import re
+    return re.sub(r"[^a-zäöüß]", "", (text or "").lower())
+
+
+UNMAPPED_TIERS = set()
+
+
 def expansion_of_tier(tier):
-    t = (tier or "").lower()
+    t = _norm(tier)
     for key, label in EXPANSIONS:
-        if key in t:
+        if _norm(key) in t:
             return label
+    if tier:
+        UNMAPPED_TIERS.add(tier)
     return None
 
 

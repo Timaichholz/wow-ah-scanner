@@ -125,6 +125,11 @@ def cmd_report(cfg, args):
            f"Marke {money(tok['price']) if tok else '–'}")
     if spots:
         notice("Top-Spots: " + " | ".join(f"{s['name_de'][:40]}: {s['verdict']}" for s in spots[:3]))
+    from .farm import UNMAPPED_TIERS
+    mx = extra.get("matrix") or {}
+    exps = [e["expansion"] for e in mx.get("expansions", [])]
+    notice(f"Matrix-Erweiterungen: {', '.join(exps) or '–'} | nicht zugeordnete Stufen: "
+           f"{'; '.join(sorted(UNMAPPED_TIERS)[:12]) or 'keine'}")
 
     print(f"\n{len(selected):,} Rezepte geprüft, {len(rows)} profitable gefunden.".replace(",", "."))
     print(f"Aussortiert: {skipped['thin']} Einzelangebote ohne Verkaufsnachweis, "
