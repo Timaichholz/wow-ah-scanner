@@ -41,6 +41,16 @@ def find_decor_recipes(api, db, recipes):
         if m.get("class_id") in HOUSING_CLASS_IDS or _has(m.get("class_name"), CLASS_KEYWORDS):
             by_class.append(r)
     stats = {"kategorie": len(by_cat), "holz": len(by_lumber), "itemklasse": len(by_class)}
+    # Diagnose: welche Itemklassen und Kategorien gibt es überhaupt? (hilft, die Erkennung zu justieren)
+    classes = {}
+    for r in recipes:
+        m = meta.get(r["crafted_id"]) or {}
+        key = f"{m.get('class_id')}:{m.get('class_name')}"
+        classes[key] = classes.get(key, 0) + 1
+    stats["klassen"] = dict(sorted(classes.items(), key=lambda kv: -kv[1])[:20])
+    stats["kategorien_schneiderei"] = sorted({r.get("category") for r in recipes
+                                              if "schneiderei" in (r.get("profession") or "").lower()})[:60]
+    stats["rezepte"] = len(recipes)
     return by_cat + by_lumber + by_class, meta, stats
 
 
