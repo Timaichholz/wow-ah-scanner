@@ -51,7 +51,31 @@ def find_decor_recipes(api, db, recipes):
     stats["kategorien_schneiderei"] = sorted({r.get("category") for r in recipes
                                               if "schneiderei" in (r.get("profession") or "").lower()})[:60]
     stats["rezepte"] = len(recipes)
+    if not (by_cat or by_lumber or by_class) and api is not None:
+        stats["api"] = _api_probe(api)
     return by_cat + by_lumber + by_class, meta, stats
+
+
+def _api_probe(api):
+    """Diagnose: Kategorien direkt aus der Blizzard-API (Schneiderei) – stehen dort Deko-Rezepte?"""
+    out = {}
+    try:
+        for prof in (api.profession_index() or {}).get("professions", []):
+            if "schneiderei" not in (prof.get("name") or "").lower():
+                continue
+            detail = api.profession(prof["id"]) or {}
+            for tier in (detail.get("skill_tiers") or [])[:3]:
+                tdata = api.skill_tier(prof["id"], tier["id"]) or {}
+                cats = {c.get("name"): len(c.get("recipes") or []) for c in tdata.get("categories") or []}
+                out[tier.get("name")] = cats
+                deco = [c for c in tdata.get("categories") or [] if _has(c.get("name"), CATEGORY_KEYWORDS)]
+                if deco and deco[0].get("recipes"):
+                    rec = api.recipe(deco[0]["recipes"][0]["id"]) or {}
+                    out["beispielrezept"] = {k: rec.get(k) for k in ("name", "crafted_item", "reagents")}
+            out["stufen"] = [t.get("name") for t in detail.get("skill_tiers") or []]
+    except Exception as exc:  # noqa: BLE001
+        out["fehler"] = str(exc)
+    return out
 
 
 def analyze_housing(api, db, mv, cfg, recipes):
