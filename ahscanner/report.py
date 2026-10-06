@@ -52,9 +52,13 @@ const b=t.tBodies[0],rows=[...b.rows],asc=th.dataset.asc!=='1';th.dataset.asc=as
 rows.sort((x,y)=>{const a=x.cells[i],c=y.cells[i];const va=a.dataset.v??a.textContent,vc=c.dataset.v??c.textContent;
 const na=parseFloat(va),nc=parseFloat(vc);if(!isNaN(na)&&!isNaN(nc))return asc?na-nc:nc-na;return asc?va.localeCompare(vc):vc.localeCompare(va)});
 rows.forEach(r=>b.appendChild(r))})})});
-document.querySelectorAll('.filters button').forEach(btn=>btn.addEventListener('click',()=>{
-document.querySelectorAll('.filters button').forEach(x=>x.classList.remove('on'));btn.classList.add('on');
+document.querySelectorAll('.filters:not(.hfilters) button').forEach(btn=>btn.addEventListener('click',()=>{
+document.querySelectorAll('.filters:not(.hfilters) button').forEach(x=>x.classList.remove('on'));btn.classList.add('on');
 const f=btn.dataset.f;document.querySelectorAll('#crafts tbody tr').forEach(r=>{r.style.display=(!f||r.dataset.type===f)?'':'none'})}));
+document.querySelectorAll('.hfilters button').forEach(btn=>btn.addEventListener('click',()=>{
+document.querySelectorAll('.hfilters button').forEach(x=>x.classList.remove('on'));btn.classList.add('on');
+const f=btn.dataset.h;document.querySelectorAll('#housingtbl tbody tr').forEach(r=>{
+r.style.display=(!f||(f==='1'&&r.dataset.mine==='1')||(f==='p'&&r.dataset.good==='1'))?'':'none'})}));
 """
 
 
@@ -403,6 +407,79 @@ def _section_flips(flips):
     return "".join(out)
 
 
+def _mats_text(reagents):
+    parts = []
+    for rg in reagents:
+        if rg["unit_price"]:
+            where = f"{rg['origin']} {money(rg['unit_price'])}"
+        else:
+            where = "nicht im AH"
+        parts.append(f"{_num(rg['qty'], 0)}× {rg['name']} ({where})")
+    return " · ".join(parts) or "–"
+
+
+def _section_housing(h):
+    out = ["<section id='housing'><h2>Housing-Deko</h2>",
+           "<div class='note'>Alle herstellbaren <b>Deko-Gegenstände</b> aller Berufe (ohne Midnight-Stufen). "
+           "<i>Gewinn</i> = Verkaufspreis abzüglich 5 % AH-Gebühr minus Materialkosten aus dem AH. "
+           "<i>Potenzial/Tag</i> rechnet realistisch: höchstens "
+           f"{10} Verkäufe pro Tag für dich allein. Rezepte lernst du beim <b>Berufslehrer der jeweiligen Erweiterung</b>; "
+           "Holz kann jeder Charakter mit der Axt hacken (warbandweit nutzbar). "
+           "✓ = dein Beruf (Schneiderei, Verzauberkunst).</div>"]
+    if not h or not h.get("rows"):
+        out.append("<p class='muted'>Noch keine Deko-Rezepte erkannt.</p></section>")
+        return "".join(out)
+    cards = []
+    for p in h["professions"]:
+        best = p["best"]
+        best_txt = (f"Bestes: {_link(best['item_id'], best['item'])} – {money(best['potential_per_day'])}/Tag"
+                    if best else "<span class='muted'>noch kein lohnendes Rezept</span>")
+        mine = " ✓" if p["mine"] else ""
+        cards.append(f"<div class='card'><div class='ctitle'>{_e(p['profession'])}{mine}</div>"
+                     f"<div class='small'>{p['recipes']} Rezepte · {p['profitable']} mit Gewinn · "
+                     f"{p['selling']} verkaufen sich (≥ 1/Tag)</div><div class='small'>{best_txt}</div></div>")
+    out.append(f"<div class='cards'>{''.join(cards)}</div>")
+    out.append("<div class='filters hfilters'><button class='on' data-h=''>Alle Berufe</button>"
+               "<button data-h='1'>Nur deine Berufe</button><button data-h='p'>Nur mit Gewinn &amp; Verkäufen</button></div>")
+    body = []
+    for x in h["rows"]:
+        good = (x["profit"] or 0) > 0 and (x["sold_per_day"] or 0) >= 1
+        flags = "; ".join(x["flags"]) or "–"
+        body.append(f"<tr data-mine='{1 if x['mine'] else 0}' data-good='{1 if good else 0}'>" + "".join([
+            _cell("✓" if x["mine"] else "", 1 if x["mine"] else 0),
+            f"<td>{_link(x['item_id'], x['item'])}</td>",
+            _cell(x["profession"]), _cell(x["expansion"]),
+            _cell(money(x["sell_price"]), x["sell_price"] or 0, "num"),
+            _cell(money(x["cost"]) + ("" if x["cost_complete"] else " +?"), x["cost"], "num"),
+            _cell(money(x["profit"]), x["profit"] if x["profit"] is not None else -1e15,
+                  "num " + ("good" if (x["profit"] or 0) > 0 else "bad")),
+            _cell(_sold(x["sold_per_day"]), x["sold_per_day"] if x["sold_per_day"] is not None else -1, "num"),
+            _cell(f"{x['supply']} / {x['n_auctions']}", x["supply"], "num"),
+            _cell(money(x["potential_per_day"]), x["potential_per_day"] if x["potential_per_day"] is not None else -1e15, "num"),
+            _cell(_mats_text(x["reagents"]), cls="wrapcell"),
+            _cell(flags, cls="wrapcell"),
+        ]) + "</tr>")
+    out.append("<div class='wrap'><table id='housingtbl'><thead><tr><th>Dein Beruf</th><th>Item</th><th>Beruf</th>"
+               "<th>Erweiterung</th><th>Verkaufspreis</th><th>Materialkosten</th><th>Gewinn</th><th>Verkauft/Tag</th>"
+               "<th>Angebot / Auktionen</th><th>Potenzial/Tag</th><th>Benötigt</th><th>Hinweise</th></tr></thead><tbody>"
+               + "".join(body) + "</tbody></table></div>")
+    if h.get("materials"):
+        rows = []
+        for m in h["materials"]:
+            rows.append("<tr>" + "".join([
+                f"<td>{_link(m['id'], m['name'])}</td>",
+                _cell("Holz" if m["lumber"] else "Material"),
+                _cell(m["recipes"], m["recipes"], "num"),
+                _cell(money(m["unit_price"]) if m["unit_price"] else "nicht im AH", m["unit_price"] or 0, "num"),
+                _cell(m["origin"]),
+            ]) + "</tr>")
+        out.append("<h3>Einkaufs- &amp; Sammelliste für deine lohnenden Deko-Rezepte</h3>"
+                   "<div class='wrap'><table class='mini'><thead><tr><th>Material</th><th>Art</th><th>In Rezepten</th>"
+                   "<th>Preis/Stück</th><th>Quelle</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>")
+    out.append("</section>")
+    return "".join(out)
+
+
 def _heat(value, vmax):
     if not value or not vmax:
         return ""
@@ -517,7 +594,7 @@ def write_html(path, recipes, materials, has_demand, demand_hours, overview, ski
 <style>{CSS}{EXTRA_CSS}</style></head>
 <body><main><h1>Gold-Berater · Dun Morogh</h1>
 <div class="meta">Erstellt {datetime.now():%d.%m.%Y %H:%M} · {scans} · Nachfrage-Zeitraum: {demand_hours:.0f} h · <a href="farmliste_aktuell.txt">Farmliste (Text)</a></div>
-<nav><a href="#uebersicht">Übersicht</a><a href="#farmspots">Farmspots</a><a href="#berufe">Berufe × Erweiterung</a><a href="#volumen">Volumen</a><a href="#schnaeppchen">Schnäppchen</a><a href="#rohstoffe">Rohstoffe</a><a href="#transmog">Transmog</a><a href="#crafting">Crafting</a></nav>
+<nav><a href="#uebersicht">Übersicht</a><a href="#farmspots">Farmspots</a><a href="#berufe">Berufe × Erweiterung</a><a href="#volumen">Volumen</a><a href="#schnaeppchen">Schnäppchen</a><a href="#rohstoffe">Rohstoffe</a><a href="#transmog">Transmog</a><a href="#housing">Housing-Deko</a><a href="#crafting">Crafting</a></nav>
 {''.join(notes)}
 {_section_overview(extra, recipes, skipped)}
 {_section_spots(extra.get('spots'))}
@@ -526,6 +603,7 @@ def write_html(path, recipes, materials, has_demand, demand_hours, overview, ski
 {_section_flips(extra.get('flips') or [])}
 {_section_raw(extra.get('raw'))}
 {_section_transmog(extra.get('transmog') or [])}
+{_section_housing(extra.get('housing'))}
 <section id='crafting'><h2>Crafting</h2>
 <div class="note"><i>Potenzial/Tag</i> = Gewinn pro Stück × geschätzte Verkäufe pro Tag × angenommener Marktanteil.
 <i>Reicht Tage</i> = wie lange das Angebot bei der jetzigen Nachfrage hält (klein = knapp = gut). Spaltenköpfe anklicken zum Sortieren.</div>
@@ -610,6 +688,9 @@ def write_summary_json(path, recipes, extra, demand_hours):
                            "bester_beruf": e["best_craft"][0] if e["best_craft"] else None,
                            "beruf_potenzial": {k: round(v["potential"]) for k, v in e["craft"].items() if v}}
                           for e in ((extra.get("matrix") or {}).get("expansions") or [])],
+        "housing": [{k: x.get(k) for k in ("item", "item_id", "profession", "expansion", "mine", "sell_price", "cost",
+                                            "profit", "sold_per_day", "supply", "potential_per_day")}
+                    for x in ((extra.get("housing") or {}).get("rows") or [])[:80]],
         "crafts": [{k: r.get(k) for k in ("type", "item", "item_id", "profession", "tier", "profit", "sold_per_day",
                                           "invest", "rating")} for r in recipes[:40]],
     }

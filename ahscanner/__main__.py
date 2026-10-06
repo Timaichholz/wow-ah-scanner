@@ -69,6 +69,7 @@ def _optional(label, func, default):
 
 
 def cmd_report(cfg, args):
+    from .housing import analyze_housing
     from .farm import (analyze_farmspots, analyze_flips, analyze_matrix, analyze_raw_materials, analyze_token,
                        analyze_transmog, analyze_volume, data_health)
 
@@ -108,6 +109,7 @@ def cmd_report(cfg, args):
             "volume": _optional("Volumen", lambda: analyze_volume(api, db, mv, cfg, recipes), []),
             "flips": _optional("Schnäppchen", lambda: analyze_flips(api, db, mv, cfg, recipes), []),
             "matrix": _optional("Berufe-Matrix", lambda: analyze_matrix(api, db, mv, cfg, recipes, all_rows), None),
+            "housing": _optional("Housing-Deko", lambda: analyze_housing(api, db, mv, cfg, material_recipes), None),
         }
     finally:
         db.close()
@@ -134,8 +136,19 @@ def cmd_report(cfg, args):
         top = [r for r in rows if r["type"] == typ][:8]
         if top:
             notice(f"Top {typ}: " + " | ".join(_row(r) for r in top))
+    hs = extra.get("housing") or {}
+    if hs:
+        cats = sorted({(x["profession"], x["category"]) for x in hs["rows"]})
+        notice(f"Housing: {len(hs['rows'])} Deko-Items erkannt (Signale {hs['detect']}) | Kategorien: "
+               + "; ".join(f"{p[:12]}/{c}" for p, c in cats[:25]))
+        top = [x for x in hs["rows"] if x["mine"]][:8]
+        if top:
+            notice("Housing deine Berufe: " + " | ".join(
+                f"{x['item'][:26]} [{x['expansion']}] G {money(x['profit']) if x['profit'] is not None else '?'} "
+                f"{(str(round(x['sold_per_day'])) if x['sold_per_day'] is not None else '?')}/T "
+                f"Ang {x['supply']}/{x['n_auctions']}" for x in top))
     from .farm import UNMAPPED_TIERS
-    mx =extra.get("matrix") or {}
+    mx = extra.get("matrix") or {}
     exps = [e["expansion"] for e in mx.get("expansions", [])]
     notice(f"Matrix-Erweiterungen: {', '.join(exps) or '–'} | nicht zugeordnete Stufen: "
            f"{'; '.join(sorted(UNMAPPED_TIERS)[:12]) or 'keine'}")
