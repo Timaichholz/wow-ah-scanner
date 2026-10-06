@@ -41,15 +41,6 @@ def find_decor_recipes(api, db, recipes):
         if m.get("class_id") in HOUSING_CLASS_IDS or _has(m.get("class_name"), CLASS_KEYWORDS):
             by_class.append(r)
     stats = {"kategorie": len(by_cat), "holz": len(by_lumber), "itemklasse": len(by_class)}
-    # Diagnose: welche Itemklassen und Kategorien gibt es überhaupt? (hilft, die Erkennung zu justieren)
-    classes = {}
-    for r in recipes:
-        m = meta.get(r["crafted_id"]) or {}
-        key = f"{m.get('class_id')}:{m.get('class_name')}"
-        classes[key] = classes.get(key, 0) + 1
-    stats["klassen"] = dict(sorted(classes.items(), key=lambda kv: -kv[1])[:20])
-    stats["kategorien_schneiderei"] = sorted({r.get("category") for r in recipes
-                                              if "schneiderei" in (r.get("profession") or "").lower()})[:60]
     stats["rezepte"] = len(recipes)
     if not (by_cat or by_lumber or by_class) and api is not None:
         stats["api"] = _api_probe(api)
@@ -78,14 +69,44 @@ def _api_probe(api):
     return out
 
 
+SEARCH_PREFIX = "deko1:"
+
+
+def resolve_decor_id(api, db, name):
+    """Deko-Rezepte haben in der API kein Produkt-Item -> Item über den deutschen Namen suchen (gecacht)."""
+    key = SEARCH_PREFIX + (name or "").strip().lower()
+    cached = db.get_search(key)
+    if cached is not None:
+        return int(cached[0]) if cached[0] else None
+    if api is None or not name:
+        return None
+    found = None
+    try:
+        res = api.item_search(name, locale_field="name.de_DE") or {}
+        for hit in res.get("results") or []:
+            data = hit.get("data") or {}
+            nm = data.get("name")
+            nm = nm.get("de_DE") if isinstance(nm, dict) else nm
+            if (nm or "").strip().lower() == name.strip().lower():
+                found = data.get("id")
+                break
+    except Exception:  # noqa: BLE001 – beim nächsten Lauf erneut versuchen
+        return None
+    db.put_search(key, str(found) if found else "")
+    return found
+
+
 def analyze_housing(api, db, mv, cfg, recipes):
     a = cfg["analysis"]
     cut = float(a.get("ah_cut", 0.05))
     decor, meta, stats = find_decor_recipes(api, db, recipes)
 
     rows = {}
+    unresolved = 0
     for r in decor:
-        out_id = r["crafted_id"]
+        out_id = r["crafted_id"] or resolve_decor_id(api, db, r.get("crafted_name") or r.get("name"))
+        if not out_id:
+            unresolved += 1
         st = mv.stats(out_id)
         sold = mv.sold_per_day(out_id)
         if st and st.get("min_price"):
@@ -134,9 +155,10 @@ def analyze_housing(api, db, mv, cfg, recipes):
             "potential_per_day": potential, "reagents": reagents, "flags": flags,
             "cost_complete": missing == 0,
         }
-        prev = rows.get(out_id)
+        key = out_id or ("r", r["id"])
+        prev = rows.get(key)
         if prev is None or (row["profit"] or -1e18) > (prev["profit"] or -1e18):
-            rows[out_id] = row
+            rows[key] = row
 
     out = list(rows.values())
     out.sort(key=lambda x: (x["potential_per_day"] is not None, x["potential_per_day"] or 0,
@@ -166,4 +188,5 @@ def analyze_housing(api, db, mv, cfg, recipes):
                                             "origin": rg["origin"], "lumber": rg["lumber"]})
             mm["recipes"] += 1
     mat_list = sorted(mats.values(), key=lambda m: (-m["recipes"], m["name"]))[:40]
+    stats["ohne_item"] = unresolved
     return {"rows": out, "professions": prof_list, "materials": mat_list, "detect": stats}

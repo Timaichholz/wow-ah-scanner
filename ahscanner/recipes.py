@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from .config import RECIPES_FILE
 
 # erhöhen, wenn sich das Rezeptformat ändert -> Cloud lädt die Rezepte automatisch neu
-RECIPES_VERSION = 2
+RECIPES_VERSION = 3
 
 
 def _crafted_quantity(rec):
@@ -21,8 +21,12 @@ def _crafted_quantity(rec):
 
 def parse_recipe(rec, meta):
     crafted = rec.get("crafted_item") or rec.get("alliance_crafted_item") or rec.get("horde_crafted_item")
+    decor = "dekor" in (meta.get("category") or "").lower()
     if not crafted:
-        return None  # z. B. Verzauberungen ohne Item
+        if not decor:
+            return None  # z. B. Verzauberungen ohne Item
+        # Housing-Deko: Blizzard liefert kein Produkt-Item -> später über den Namen gesucht
+        crafted = {"id": None, "name": rec.get("name", "")}
     reagents = []
     for r in rec.get("reagents", []) or []:
         reagent = r.get("reagent") or {}
@@ -46,6 +50,7 @@ def parse_recipe(rec, meta):
         "reagents": reagents,
         "slot_names": slot_names,
         "has_modified_slots": bool(rec.get("modified_crafting_slots")),
+        "decor": decor,
     }
 
 
