@@ -425,6 +425,8 @@ def _section_housing(h):
            "<i>Potenzial/Tag</i> rechnet realistisch: höchstens "
            f"{10} Verkäufe pro Tag für dich allein. Rezepte lernst du beim <b>Berufslehrer der jeweiligen Erweiterung</b>; "
            "Holz kann jeder Charakter mit der Axt hacken (warbandweit nutzbar). "
+           "<i>Realistisch/Tag</i> pro Beruf = Summe über alle lohnenden Deko-Items, je höchstens 1 Verkauf pro Tag "
+           "(die Hälfte der gemessenen Verkäufe, weil du dir den Markt mit anderen teilst). "
            "✓ = dein Beruf (Schneiderei, Verzauberkunst).</div>"]
     if not h or not h.get("rows"):
         out.append("<p class='muted'>Noch keine Deko-Rezepte erkannt.</p></section>")
@@ -437,7 +439,9 @@ def _section_housing(h):
         mine = " ✓" if p["mine"] else ""
         cards.append(f"<div class='card'><div class='ctitle'>{_e(p['profession'])}{mine}</div>"
                      f"<div class='small'>{p['recipes']} Rezepte · {p['profitable']} mit Gewinn · "
-                     f"{p['selling']} verkaufen sich (≥ 1/Tag)</div><div class='small'>{best_txt}</div></div>")
+                     f"{p['selling']} verkaufen sich (≥ 1/Tag)</div>"
+                     f"<div class='big'>{money(p['realistic_day'])}<span class='muted small'> / Tag realistisch</span></div>"
+                     f"<div class='small'>{best_txt}</div></div>")
     out.append(f"<div class='cards'>{''.join(cards)}</div>")
     out.append("<div class='filters hfilters'><button class='on' data-h=''>Alle Berufe</button>"
                "<button data-h='1'>Nur deine Berufe</button><button data-h='p'>Nur mit Gewinn &amp; Verkäufen</button></div>")

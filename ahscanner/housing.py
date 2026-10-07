@@ -168,7 +168,8 @@ def analyze_housing(api, db, mv, cfg, recipes):
     profs = {}
     for x in out:
         p = profs.setdefault(x["profession"], {"profession": x["profession"], "mine": x["mine"], "recipes": 0,
-                                               "profitable": 0, "selling": 0, "best": None})
+                                               "profitable": 0, "selling": 0, "best": None,
+                                               "realistic_day": 0.0, "complete_cost": 0, "expansions": {}})
         p["recipes"] += 1
         if (x["profit"] or 0) > 0:
             p["profitable"] += 1
@@ -176,7 +177,14 @@ def analyze_housing(api, db, mv, cfg, recipes):
             p["selling"] += 1
         if (x["potential_per_day"] or 0) > ((p["best"] or {}).get("potential_per_day") or 0):
             p["best"] = x
-    prof_list = sorted(profs.values(), key=lambda p: (not p["mine"], -((p["best"] or {}).get("potential_per_day") or 0)))
+        # realistisch: von jedem lohnenden Item etwa die Hälfte der Verkäufe, höchstens 1 Stück pro Tag
+        if (x["profit"] or 0) > 0 and (x["sold_per_day"] or 0) > 0:
+            gain = x["profit"] * min(x["sold_per_day"] * 0.5, 1.0)
+            p["realistic_day"] += gain
+            p["expansions"][x["expansion"]] = p["expansions"].get(x["expansion"], 0) + gain
+            if x["cost_complete"]:
+                p["complete_cost"] += 1
+    prof_list = sorted(profs.values(), key=lambda p: -p["realistic_day"])
 
     # Materialbedarf deiner Berufe: was taucht in den lohnenden Deko-Rezepten am häufigsten auf?
     mats = {}

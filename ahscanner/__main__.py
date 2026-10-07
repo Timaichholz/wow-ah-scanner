@@ -141,6 +141,11 @@ def cmd_report(cfg, args):
         cats = sorted({(x["profession"], x["category"]) for x in hs["rows"]})
         notice(f"Housing: {len(hs['rows'])} Deko-Items erkannt (Signale {hs['detect']}) | Kategorien: "
                + "; ".join(f"{p[:12]}/{c}" for p, c in cats[:25]))
+        notice("Housing je Beruf: " + " | ".join(
+            f"{p['profession']}: {p['recipes']} Rez, {p['profitable']} Gewinn, {p['selling']} verk., "
+            f"real. {money(p['realistic_day'])}/T, Erw: "
+            + ",".join(f"{e[:6]} {money(v)}" for e, v in sorted(p['expansions'].items(), key=lambda kv: -kv[1])[:4])
+            for p in hs["professions"]))
         top = [x for x in hs["rows"] if x["mine"]][:8]
         if top:
             notice("Housing deine Berufe: " + " | ".join(
