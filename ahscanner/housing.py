@@ -162,6 +162,7 @@ def analyze_housing(api, db, mv, cfg, recipes):
             "days_supply": (supply / sold) if sold else None,
             "potential_per_day": potential, "reagents": reagents, "flags": flags,
             "cost_complete": missing == 0,
+            "market": {"commodity": "Region", "realm": "Realm"}.get((st or {}).get("source"), "–"),
             "wood": wood, "wood_name": ", ".join(sorted(wood_names)),
             "profit_per_wood": (profit / r["crafted_qty"] / wood) if (profit is not None and wood) else None,
         }

@@ -454,7 +454,7 @@ def _section_housing(h):
         body.append(f"<tr data-mine='{1 if x['mine'] else 0}' data-good='{1 if good else 0}'>" + "".join([
             _cell("✓" if x["mine"] else "", 1 if x["mine"] else 0),
             f"<td>{_link(x['item_id'], x['item'])}</td>",
-            _cell(x["profession"]), _cell(x["expansion"]),
+            _cell(x["profession"]), _cell(x["expansion"]), _cell(x.get("market", "–")),
             _cell(money(x["sell_price"]), x["sell_price"] or 0, "num"),
             _cell(money(x["cost"]) + ("" if x["cost_complete"] else " +?"), x["cost"], "num"),
             _cell(money(x["profit"]), x["profit"] if x["profit"] is not None else -1e15,
@@ -468,7 +468,7 @@ def _section_housing(h):
             _cell(flags, cls="wrapcell"),
         ]) + "</tr>")
     out.append("<div class='wrap'><table id='housingtbl'><thead><tr><th>Dein Beruf</th><th>Item</th><th>Beruf</th>"
-               "<th>Erweiterung</th><th>Verkaufspreis</th><th>Materialkosten</th><th>Gewinn</th><th>Verkauft/Tag</th>"
+               "<th>Erweiterung</th><th>Markt</th><th>Verkaufspreis</th><th>Materialkosten</th><th>Gewinn</th><th>Verkauft/Tag</th>"
                "<th>Angebot / Auktionen</th><th>Potenzial/Tag</th><th>Holz</th><th>Gewinn pro Holz</th>"
                "<th>Weitere Materialien</th><th>Hinweise</th></tr></thead><tbody>"
                + "".join(body) + "</tbody></table></div>")
