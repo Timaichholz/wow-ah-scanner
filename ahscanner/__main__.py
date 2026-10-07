@@ -146,6 +146,16 @@ def cmd_report(cfg, args):
             f"real. {money(p['realistic_day'])}/T, Erw: "
             + ",".join(f"{e[:6]} {money(v)}" for e, v in sorted(p['expansions'].items(), key=lambda kv: -kv[1])[:4])
             for p in hs["professions"]))
+        def _gain(x):
+            return (x["profit"] or 0) * min((x["sold_per_day"] or 0) * 0.5, 1.0) if (x["profit"] or 0) > 0 else 0
+        detail = sorted(hs["rows"], key=_gain, reverse=True)[:12]
+        notice("Housing Detail: " + " || ".join(
+            f"{x['item'][:30]} [{x['profession'][:6]}/{x['expansion'][:8]}] VK {money(x['sell_price'])} "
+            f"K {money(x['cost'])}{'' if x['cost_complete'] else '+?'} {x['sold_per_day'] or 0:.2f}/T "
+            f"Ang {x['supply']}/{x['n_auctions']} Mat: "
+            + ", ".join(f"{r['qty']:g}x {r['name'][:18]}={money(r['unit_price']) if r['unit_price'] else 'n/a'}"
+                        for r in x["reagents"])
+            for x in detail))
         top = [x for x in hs["rows"] if x["mine"]][:8]
         if top:
             notice("Housing deine Berufe: " + " | ".join(
