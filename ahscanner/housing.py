@@ -118,16 +118,24 @@ def analyze_housing(api, db, mv, cfg, recipes):
             sell = avg  # konservativ: nie über dem Durchschnittspreis
         flags = []
         reagents, cost, missing = [], 0, 0
+        wood, wood_names = 0, set()
         for rg in r.get("reagents") or []:
             if not rg.get("qty") or not rg.get("id"):
                 continue
-            price, origin = _reagent_price(mv, cfg, rg["id"])
+            lumber = _is_lumber(rg)
+            if lumber:
+                # Holz ist nicht handelbar: selbst hacken (warbandweit nutzbar), kostet Zeit statt Gold
+                price, origin = None, "Holz – selbst hacken"
+                wood += rg["qty"]
+                wood_names.add(rg.get("name") or "Holz")
+            else:
+                price, origin = _reagent_price(mv, cfg, rg["id"])
             line = price * rg["qty"] if price else 0
             cost += line
-            if not price:
+            if not price and not lumber:
                 missing += 1
             reagents.append({"id": rg["id"], "name": rg.get("name") or f"Item {rg['id']}", "qty": rg["qty"],
-                             "unit_price": price, "origin": origin, "line_cost": line, "lumber": _is_lumber(rg)})
+                             "unit_price": price, "origin": origin, "line_cost": line, "lumber": lumber})
         if r.get("slot_names"):
             flags.append("Zusatz-Slots: " + ", ".join(r["slot_names"][:3]))
         if missing:
@@ -154,6 +162,8 @@ def analyze_housing(api, db, mv, cfg, recipes):
             "days_supply": (supply / sold) if sold else None,
             "potential_per_day": potential, "reagents": reagents, "flags": flags,
             "cost_complete": missing == 0,
+            "wood": wood, "wood_name": ", ".join(sorted(wood_names)),
+            "profit_per_wood": (profit / r["crafted_qty"] / wood) if (profit is not None and wood) else None,
         }
         key = out_id or ("r", r["id"])
         prev = rows.get(key)
@@ -193,8 +203,9 @@ def analyze_housing(api, db, mv, cfg, recipes):
             continue
         for rg in x["reagents"]:
             mm = mats.setdefault(rg["id"], {"id": rg["id"], "name": rg["name"], "recipes": 0, "unit_price": rg["unit_price"],
-                                            "origin": rg["origin"], "lumber": rg["lumber"]})
+                                            "origin": rg["origin"], "lumber": rg["lumber"], "qty": 0})
             mm["recipes"] += 1
-    mat_list = sorted(mats.values(), key=lambda m: (-m["recipes"], m["name"]))[:40]
+            mm["qty"] += rg["qty"]
+    mat_list = sorted(mats.values(), key=lambda m: (not m["lumber"], -m["recipes"], m["name"]))[:50]
     stats["ohne_item"] = unresolved
     return {"rows": out, "professions": prof_list, "materials": mat_list, "detect": stats}

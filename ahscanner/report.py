@@ -424,7 +424,9 @@ def _section_housing(h):
            "<i>Gewinn</i> = Verkaufspreis abzüglich 5 % AH-Gebühr minus Materialkosten aus dem AH. "
            "<i>Potenzial/Tag</i> rechnet realistisch: höchstens "
            f"{10} Verkäufe pro Tag für dich allein. Rezepte lernst du beim <b>Berufslehrer der jeweiligen Erweiterung</b>; "
-           "Holz kann jeder Charakter mit der Axt hacken (warbandweit nutzbar). "
+           "<b>Holz</b> ist nicht handelbar: Du hackst es selbst in Waldgebieten der jeweiligen Erweiterung und kannst es "
+           "zwischen deinen Charakteren nutzen. Es ist im Gewinn deshalb nicht als Kosten enthalten – "
+           "<i>Gewinn pro Holz</i> zeigt, wofür sich dein gehacktes Holz am meisten lohnt. "
            "<i>Realistisch/Tag</i> pro Beruf = Summe über alle lohnenden Deko-Items, je höchstens 1 Verkauf pro Tag "
            "(die Hälfte der gemessenen Verkäufe, weil du dir den Markt mit anderen teilst). "
            "✓ = dein Beruf (Schneiderei, Verzauberkunst).</div>"]
@@ -460,12 +462,15 @@ def _section_housing(h):
             _cell(_sold(x["sold_per_day"]), x["sold_per_day"] if x["sold_per_day"] is not None else -1, "num"),
             _cell(f"{x['supply']} / {x['n_auctions']}", x["supply"], "num"),
             _cell(money(x["potential_per_day"]), x["potential_per_day"] if x["potential_per_day"] is not None else -1e15, "num"),
-            _cell(_mats_text(x["reagents"]), cls="wrapcell"),
+            _cell(f"{_num(x['wood'], 0)}× {x['wood_name']}" if x["wood"] else "–", x["wood"], "num"),
+            _cell(money(x["profit_per_wood"]), x["profit_per_wood"] if x["profit_per_wood"] is not None else -1e15, "num"),
+            _cell(_mats_text([rg for rg in x["reagents"] if not rg["lumber"]]), cls="wrapcell"),
             _cell(flags, cls="wrapcell"),
         ]) + "</tr>")
     out.append("<div class='wrap'><table id='housingtbl'><thead><tr><th>Dein Beruf</th><th>Item</th><th>Beruf</th>"
                "<th>Erweiterung</th><th>Verkaufspreis</th><th>Materialkosten</th><th>Gewinn</th><th>Verkauft/Tag</th>"
-               "<th>Angebot / Auktionen</th><th>Potenzial/Tag</th><th>Benötigt</th><th>Hinweise</th></tr></thead><tbody>"
+               "<th>Angebot / Auktionen</th><th>Potenzial/Tag</th><th>Holz</th><th>Gewinn pro Holz</th>"
+               "<th>Weitere Materialien</th><th>Hinweise</th></tr></thead><tbody>"
                + "".join(body) + "</tbody></table></div>")
     if h.get("materials"):
         rows = []
@@ -474,12 +479,14 @@ def _section_housing(h):
                 f"<td>{_link(m['id'], m['name'])}</td>",
                 _cell("Holz" if m["lumber"] else "Material"),
                 _cell(m["recipes"], m["recipes"], "num"),
-                _cell(money(m["unit_price"]) if m["unit_price"] else "nicht im AH", m["unit_price"] or 0, "num"),
+                _cell(_num(m["qty"], 0), m["qty"], "num"),
+                _cell(money(m["unit_price"]) if m["unit_price"] else ("selbst hacken" if m["lumber"] else "nicht im AH"),
+                      m["unit_price"] or 0, "num"),
                 _cell(m["origin"]),
             ]) + "</tr>")
         out.append("<h3>Einkaufs- &amp; Sammelliste für deine lohnenden Deko-Rezepte</h3>"
                    "<div class='wrap'><table class='mini'><thead><tr><th>Material</th><th>Art</th><th>In Rezepten</th>"
-                   "<th>Preis/Stück</th><th>Quelle</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>")
+                   "<th>Menge für je 1 Craft</th><th>Preis/Stück</th><th>Quelle</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table></div>")
     out.append("</section>")
     return "".join(out)
 
