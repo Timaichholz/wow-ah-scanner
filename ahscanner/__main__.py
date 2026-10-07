@@ -115,6 +115,18 @@ def cmd_report(cfg, args):
         db.close()
 
     html_path, farm_path = write_reports(rows, materials, has_demand, mv.demand_hours(), overview, cfg, skipped, extra)
+    try:
+        from .config import OUTPUT_DIR
+        from .export import build_candidates
+        db2 = DB(DB_FILE)
+        try:
+            mv2 = MarketView(db2, cfg)
+            lines = build_candidates(all_rows, extra, mv2, mv2.demand_hours())
+        finally:
+            db2.close()
+        (OUTPUT_DIR / "kandidaten.txt").write_text("\n".join(lines), encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001
+        notice(f"Kandidatenliste fehlgeschlagen: {type(exc).__name__}: {exc}", "warning")
 
     spots = extra["spots"] or []
     found = sum(1 for s in spots for l in s["loot"] if l["found"])
@@ -229,6 +241,8 @@ def cmd_ci(cfg, args):
     site.mkdir(exist_ok=True)
     shutil.copy(OUTPUT_DIR / "bericht_aktuell.html", site / "index.html")
     shutil.copy(OUTPUT_DIR / "farmliste_aktuell.txt", site / "farmliste_aktuell.txt")
+    if (OUTPUT_DIR / "kandidaten.txt").exists():
+        shutil.copy(OUTPUT_DIR / "kandidaten.txt", site / "kandidaten.txt")
     if (OUTPUT_DIR / "daten.json").exists():
         shutil.copy(OUTPUT_DIR / "daten.json", site / "daten.json")
     print(f"Webseite vorbereitet: {site}")

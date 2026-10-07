@@ -53,6 +53,25 @@ jobs:
           AHSCANNER_CLIENT_SECRET: ${{ secrets.BLIZZARD_CLIENT_SECRET }}
         run: python -m ahscanner --config config.ci.toml ci
 
+      - name: Kandidatenliste als Hinweise ausgeben
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("output/kandidaten.txt")
+          if p.exists():
+              lines = p.read_text(encoding="utf-8").splitlines()
+              chunks, cur = [], ""
+              for ln in lines:
+                  if len(cur) + len(ln) > 3800:
+                      chunks.append(cur); cur = ""
+                  cur += ln + "\n"
+              chunks.append(cur)
+              for i, c in enumerate(chunks[:10], 1):
+                  c = c.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+                  print(f"::notice title=Kandidaten {i}/{len(chunks)}::{c}")
+          PY
+
       - name: Zustand speichern
         if: always()
         uses: actions/cache/save@v4
