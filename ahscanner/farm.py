@@ -406,6 +406,9 @@ def analyze_matrix(api, db, mv, cfg, recipes, craft_rows, candidates=3000):
                                    "price": st["market_price"], "sold_per_day": sold,
                                    "gold_volume": vol if sold is not None else None})
     for c in gather.values():
+        # wertvollste Einzelfunde (mit nennenswertem Absatz) zusätzlich merken
+        c["top_price"] = sorted([it for it in c["items"] if (it["sold_per_day"] or 0) >= 20],
+                                key=lambda it: it["price"], reverse=True)[:4]
         c["items"].sort(key=lambda it: (it["gold_volume"] or 0, it["price"]), reverse=True)
         c["items"] = c["items"][:5]
         ps = sorted(c.pop("prices"))

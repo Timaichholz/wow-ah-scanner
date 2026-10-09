@@ -46,6 +46,17 @@ def build_candidates(all_rows, extra, mv, demand_hours):
                  f"K {_g(x['cost'])}{'' if x['cost_complete'] else '+?'} | G {_g(x['profit'])} | {_f(x['sold_per_day'], 2)}/T | "
                  f"{x['supply']}/{x['n_auctions']} | {x.get('wood', 0):g}x {x.get('wood_name', '')}")
 
+    mx = extra.get("matrix") or {}
+    L.append("## SAMMELN je Erweiterung (Beruf: Umsatz/T | Top nach Umsatz: Name Preis Verk/T | Teuerste: Name Preis Verk/T)")
+    for e in mx.get("expansions") or []:
+        for act in ("Bergbau", "Kräuterkunde"):
+            c = (e.get("gather") or {}).get(act)
+            if not c:
+                continue
+            top = ", ".join(f"{it['name'][:20]} {_g(it['price'])} {_f(it['sold_per_day'], 0)}" for it in c["items"])
+            exp_ = ", ".join(f"{it['name'][:20]} {_g(it['price'])} {_f(it['sold_per_day'], 0)}" for it in c.get("top_price", []))
+            L.append(f"{e['expansion'][:14]} {act}: {_g(c['volume'])} | {top} | {exp_}")
+
     L.append("## ROHSTOFF (Gruppe | Item | Erw | Preis | Verk/T | Umsatz/T | Angebot | Trend)")
     for g in extra.get("raw") or []:
         for it in g["items"][:8]:
