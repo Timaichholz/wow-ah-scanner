@@ -390,12 +390,24 @@ def analyze_matrix(api, db, mv, cfg, recipes, craft_rows, candidates=3000):
     meta = ensure_items(api, db, [r[1] for r in rows])
 
     gather = {}
+    midnight = {}
     for vol, item_id, st, sold in rows:
         m = meta.get(item_id) or {}
         if m.get("class_id") != TRADE_GOODS_CLASS:
             continue
         exp = res.get(item_id, m)
-        if not exp or exp == "Midnight":
+        if exp == "Midnight":
+            # separat auswerten (nicht in der Matrix): was bringt Sammeln in Midnight wirklich?
+            for act, subs in GATHER:
+                if m.get("subclass_id") in subs:
+                    c = midnight.setdefault(act, {"volume": 0.0, "items": []})
+                    c["volume"] += vol
+                    c["items"].append({"item_id": item_id, "name": m.get("name") or f"Item {item_id}",
+                                       "price": st["market_price"], "sold_per_day": sold,
+                                       "supply": st["total_qty"], "trend": mv.trend(item_id) if hasattr(mv, "trend") else None,
+                                       "avg": mv.avg_price(item_id)})
+            continue
+        if not exp:
             continue
         for act, subs in GATHER:
             if m.get("subclass_id") in subs:
@@ -449,7 +461,10 @@ def analyze_matrix(api, db, mv, cfg, recipes, craft_rows, candidates=3000):
                         "spots": [{"id": s["id"], "name_de": s["name_de"]} for s in spots if s.get("expansion") == e],
                         "volume": sum(c["volume"] for c in g.values() if c)})
     has_demand = any(it["gold_volume"] is not None for c in gather.values() for it in c["items"])
-    return {"expansions": per_exp, "gather_cols": gather_cols, "craft_cols": craft_cols, "has_demand": has_demand}
+    for c in midnight.values():
+        c["items"].sort(key=lambda it: (it["price"] or 0) * (it["sold_per_day"] or 0), reverse=True)
+        c["items"] = c["items"][:12]
+    return {"midnight_gather": midnight, "expansions": per_exp, "gather_cols": gather_cols, "craft_cols": craft_cols, "has_demand": has_demand}
 
 
 # ---------------------------------------------------------------------------

@@ -180,6 +180,11 @@ def cmd_report(cfg, args):
                 f"Ang {x['supply']}/{x['n_auctions']}" for x in top))
     from .farm import UNMAPPED_TIERS
     mx = extra.get("matrix") or {}
+    for act, c in sorted((mx.get("midnight_gather") or {}).items(), key=lambda kv: -kv[1]["volume"]):
+        notice(f"Midnight Sammeln {act}: Umsatz/T {money(c['volume'])} | " + " | ".join(
+            f"{it['item_id']} {it['name'][:24]} {money(it['price'])} (Ø {money(it['avg']) if it.get('avg') else '?'}) "
+            f"{round(it['sold_per_day']) if it['sold_per_day'] is not None else '?'}/T Ang {it['supply']}"
+            for it in c["items"]))
     exps = [e["expansion"] for e in mx.get("expansions", [])]
     notice(f"Matrix-Erweiterungen: {', '.join(exps) or '–'} | nicht zugeordnete Stufen: "
            f"{'; '.join(sorted(UNMAPPED_TIERS)[:12]) or 'keine'}")
