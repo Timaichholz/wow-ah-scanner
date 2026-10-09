@@ -47,6 +47,12 @@ def build_candidates(all_rows, extra, mv, demand_hours):
                  f"{x['supply']}/{x['n_auctions']} | {x.get('wood', 0):g}x {x.get('wood_name', '')}")
 
     mx = extra.get("matrix") or {}
+    L.append("## MIDNIGHT SAMMELN (Beruf: Umsatz/T | ID Name Preis Ø Verk/T Angebot)")
+    for act, c in sorted((mx.get("midnight_gather") or {}).items(), key=lambda kv: -kv[1]["volume"]):
+        L.append(f"{act}: {_g(c['volume'])}")
+        for it in c["items"]:
+            L.append(f"  {it['item_id']} {it['name'][:28]} | {_g(it['price'])} | Ø {_g(it.get('avg'))} | "
+                     f"{_f(it['sold_per_day'], 0)}/T | Ang {it['supply']}")
     L.append("## SAMMELN je Erweiterung (Beruf: Umsatz/T | Top nach Umsatz: Name Preis Verk/T | Teuerste: Name Preis Verk/T)")
     for e in mx.get("expansions") or []:
         for act in ("Bergbau", "Kräuterkunde"):
